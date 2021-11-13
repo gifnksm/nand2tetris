@@ -1,0 +1,20 @@
+#!/bin/bash
+
+script_dir="$(dirname "$0")"
+tool_name="$(basename "$0")"
+
+project_root="$(readlink -f "$script_dir/..")"
+tools_dir="$project_root/target/nand2tetris/tools"
+
+if ! [ -d "${tools_dir}" ]; then
+    cat <<END >&2
+ERROR: tools directory not found.
+
+Please install tools by running:
+    cd ${project_root}
+    make tools
+END
+    exit 1
+fi
+
+sh "$tools_dir/$tool_name.sh" "$@"
