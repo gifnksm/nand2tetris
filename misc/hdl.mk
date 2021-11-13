@@ -15,16 +15,13 @@ all:
 clean:
 .PHONY: clean
 
-test:
-.PHONY: test
-
 test: $(patsubst %.hdl,test-%,$(HDL))
 .PHONY: test
 
 test-%: $(TARGET_DIR)/%.ok
 	@echo "[TEST $(DIRNAME)/$(notdir $(basename $<))] OK"
 .PHONY: test-%
-.PRECIOUS: %
+.PRECIOUS: $(TARGET_DIR)/%.ok
 
 $(TARGET_DIR)/%.ok: $(TARGET_DIR)/%.hdl $(addprefix $(TARGET_DIR)/,$(HDL))
 	@echo "[TEST $(DIRNAME)/$(notdir $(basename $<))] running ..."
