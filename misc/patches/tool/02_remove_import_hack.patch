@@ -1,0 +1,11 @@
+diff -ur source.orig/HackGUIPackageSource/HackGUI/TrimmedValuesOnlyAbsoluteMemorySegmentComponent.java source.patched/HackGUIPackageSource/HackGUI/TrimmedValuesOnlyAbsoluteMemorySegmentComponent.java
+--- source.orig/HackGUIPackageSource/HackGUI/TrimmedValuesOnlyAbsoluteMemorySegmentComponent.java	2005-04-16 21:09:54.000000000 +0900
++++ source.patched/HackGUIPackageSource/HackGUI/TrimmedValuesOnlyAbsoluteMemorySegmentComponent.java	2021-11-14 22:04:45.111036871 +0900
+@@ -17,7 +17,6 @@
+
+ package HackGUI;
+
+-import Hack.*;
+ import javax.swing.table.*;
+ import javax.swing.*;
+ import java.awt.*;

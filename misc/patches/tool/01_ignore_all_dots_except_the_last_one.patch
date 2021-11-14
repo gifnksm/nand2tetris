@@ -1,0 +1,12 @@
+diff -ur tool_source.orig/HackPackageSource/Hack/Translators/HackTranslator.java tool_source.patched/HackPackageSource/Hack/Translators/HackTranslator.java
+--- tool_source.orig/HackPackageSource/Hack/Translators/HackTranslator.java	2006-02-06 00:05:30.000000000 +0900
++++ tool_source.patched/HackPackageSource/Hack/Translators/HackTranslator.java	2021-11-14 18:59:46.151144135 +0900
+@@ -305,7 +305,7 @@
+                 gui.getSource().setContents(linesArray);
+             }
+ 
+-            destFileName = sourceFileName.substring(0,sourceFileName.indexOf('.')) +
++            destFileName = sourceFileName.substring(0,sourceFileName.lastIndexOf('.')) +
+                              "." + getDestinationExtension();
+ 
+             initSource();

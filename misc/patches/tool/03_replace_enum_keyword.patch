@@ -1,0 +1,16 @@
+diff -ru src.orig/SimulatorsPackageSource/Hack/HardwareSimulator/PartPins.java src/SimulatorsPackageSource/Hack/HardwareSimulator/PartPins.java
+--- src.orig/SimulatorsPackageSource/Hack/HardwareSimulator/PartPins.java	2005-04-16 20:46:44.000000000 +0900
++++ src/SimulatorsPackageSource/Hack/HardwareSimulator/PartPins.java	2021-11-14 22:27:16.201023814 +0900
+@@ -65,9 +65,9 @@
+         partGateClass = null;
+
+         // remove all node gui adapters
+-        Enumeration enum = nodes.keys();
+-        while (enum.hasMoreElements()) {
+-            Node node = (Node)enum.nextElement();
++        Enumeration enum_ = nodes.keys();
++        while (enum_.hasMoreElements()) {
++            Node node = (Node)enum_.nextElement();
+             Node nodeAdapter = (Node)nodes.get(node);
+             node.removeListener(nodeAdapter);
+         }
