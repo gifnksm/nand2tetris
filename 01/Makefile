@@ -1,1 +1,1 @@
-../misc/hdl.mk
+../misc/common.mk

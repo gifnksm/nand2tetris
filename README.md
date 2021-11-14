@@ -1,6 +1,6 @@
 # Nand2Tetris
 
-「[O'Reilly Japan - コンピュータシステムの理論と実装][book]]」 の演習問題集の回答です。
+「[O'Reilly Japan - コンピュータシステムの理論と実装][book]」 の演習問題集の回答です。
 
 ## Setup
 
