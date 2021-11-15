@@ -1,0 +1,59 @@
+#!/bin/bash -eu
+
+if [ "$#" -ne 1 ]; then
+    echo "Usage: $0 <test_name>" >&2
+    exit 1
+fi
+
+TEST_FILE="$1"
+
+if ! [ -f "${TEST_FILE}" ]; then
+    echo "Test file ${TEST_FILE} does not exist" >&2
+    exit 1
+fi
+
+TEST_FILE="$(readlink -f "${TEST_FILE}")"
+cd "$(dirname "${TEST_FILE}")"
+TEST_FILE="$(basename "${TEST_FILE}")"
+
+GIT_PREFIX="$(git rev-parse --show-prefix)"
+GIT_PREFIX="${GIT_PREFIX#target/nand2tetris/}"
+GIT_PREFIX="${GIT_PREFIX%/}"
+GIT_CDUP="$(git rev-parse --show-cdup)"
+GIT_CDUP="${GIT_CDUP%/}"
+
+TYPE="$(sed -n 's/^load *\(.*\)[;,].*/\1/p' "${TEST_FILE}")"
+
+case "${TYPE}" in
+*.hdl)
+    EXECUTABLE="${GIT_CDUP}/tools/HardwareSimulator"
+    ;;
+*.asm)
+    EXECUTABLE="${GIT_CDUP}/tools/CPUEmulator"
+    ;;
+*)
+    echo "Unknown load file type \"${TYPE}\" in ${TEST_FILE}" >&2
+    exit 1
+    ;;
+esac
+
+if [ -f .tstignore ] && grep -F "no-run:${TEST_FILE}" .tstignore >/dev/null; then
+    echo "TEST ${GIT_PREFIX}/${TEST_FILE} (${TYPE}) skipped due to .tstignore"
+    exit 0
+fi
+
+echo "TEST ${GIT_PREFIX}/${TEST_FILE} (${TYPE}) running with ${EXECUTABLE##*/}..." >&2
+set +e
+"${EXECUTABLE}" "${TEST_FILE}"
+EXIT_CODE="$?"
+set -e
+
+if [ "${EXIT_CODE}" -ne 0 ]; then
+    if [ -f .tstignore ] && grep -F "ignore-fail:${TEST_FILE}" .tstignore >/dev/null; then
+        echo "TEST ${GIT_PREFIX}/${TEST_FILE} (${TYPE}) failed with exit code ${EXIT_CODE}, ignored" >&2
+        exit 0
+    fi
+    echo "TEST ${GIT_PREFIX}/${TEST_FILE} (${TYPE}) failed with exit code ${EXIT_CODE}" >&2
+    exit 1
+fi
+echo "TEST ${GIT_PREFIX}/${TEST_FILE} (${TYPE}) ok" >&2
