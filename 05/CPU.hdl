@@ -1,0 +1,76 @@
+/**
+ * The Hack CPU (Central Processing unit), consisting of an ALU,
+ * two registers named A and D, and a program counter named PC.
+ * The CPU is designed to fetch and execute instructions written in
+ * the Hack machine language. In particular, functions as follows:
+ * Executes the inputted instruction according to the Hack machine
+ * language specification. The D and A in the language specification
+ * refer to CPU-resident registers, while M refers to the external
+ * memory location addressed by A, i.e. to Memory[A]. The inM input
+ * holds the value of this location. If the current instruction needs
+ * to write a value to M, the value is placed in outM, the address
+ * of the target location is placed in the addressM output, and the
+ * writeM control bit is asserted. (When writeM==0, any value may
+ * appear in outM). The outM and writeM outputs are combinational:
+ * they are affected instantaneously by the execution of the current
+ * instruction. The addressM and pc outputs are clocked: although they
+ * are affected by the execution of the current instruction, they commit
+ * to their new values only in the next time step. If reset==1 then the
+ * CPU jumps to address 0 (i.e. pc is set to 0 in next time step) rather
+ * than to the address resulting from executing the current instruction.
+ */
+
+CHIP CPU {
+
+    IN  inM[16],         // M value input  (M = contents of RAM[A])
+        instruction[16], // Instruction for execution
+        reset;           // Signals whether to re-start the current
+                         // program (reset==1) or continue executing
+                         // the current program (reset==0).
+
+    OUT outM[16],        // M value output
+        writeM,          // Write to M?
+        addressM[15],    // Address in data memory (of M)
+        pc[15];          // address of next instruction
+
+    PARTS:
+        // 15
+        // 15 14..13 12 11..6  5..3 2..0
+        // i  xx     a  cccccc ddd  jjj
+
+        ARegister(in = reg-a-in, load = reg-a-load, out[0..14] = addressM, out = reg-a-out);
+        DRegister(in = alu-out, load = reg-d-load, out = reg-d-out);
+        ALU(x = reg-d-out, y = a-m-out,
+            zx = instruction[11], nx = instruction[10], zy = instruction[9],
+            ny = instruction[8], f = instruction[7], no = instruction[6],
+            out = outM, out = alu-out, zr = alu-eq, ng = alu-lt);
+        PC(in = reg-a-out, load = pc-load, inc = pc-inc, reset = reset, out[0..14] = pc);
+
+        // Update A register if i == 0 or d[0] == 1
+        Not(in = instruction[15], out = is-a-inst);
+        Or(a = is-a-inst, b = instruction[5], out = reg-a-load);
+        Mux16(a[0..14] = instruction[0..14],
+              b = alu-out,
+              sel = instruction[15], out = reg-a-in);
+
+        // Update D register if i == 1 && d[1] == 1
+        And(a = instruction[15], b = instruction[4], out = reg-d-load);
+
+        // Update M if i == 1 && d[2] == 1
+        And(a = instruction[15], b = instruction[3], out = writeM);
+
+        // Switch ALU input by a
+        And(a = instruction[15], b = instruction[12], out = a-m-sel);
+        Mux16(a = reg-a-out, b = inM, sel = a-m-sel, out = a-m-out);
+
+        // Switch PC input
+        Or(a = alu-lt, b = alu-eq, out = alu-lt-eq);
+        Not(in = alu-lt-eq, out = alu-gt);
+        And(a = alu-lt, b = instruction[2], out = jmp-lt);
+        And(a = alu-eq, b = instruction[1], out = jmp-eq);
+        And(a = alu-gt, b = instruction[0], out = jmp-gt);
+        Or(a = jmp-lt, b = jmp-eq, out = jmp-lt-eq);
+        Or(a = jmp-lt-eq, b = jmp-gt, out = jmp-all);
+        And(a = jmp-all, b = instruction[15], out = pc-load);
+        Not(in = pc-load, out = pc-inc);
+}
