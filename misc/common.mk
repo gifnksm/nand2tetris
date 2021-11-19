@@ -19,7 +19,7 @@ TARGET_HDL=$(addprefix $(TARGET_DIR)/,$(HDL))
 TARGET_TSTIGNORE=$(addprefix $(TARGET_DIR)/,$(TSTIGNORE))
 TARGET=$(TARGET_HACK) $(TARGET_ASM) $(TARGET_HDL) $(TARGET_TSTIGNORE)
 
-TEST = $(wildcard $(TARGET_DIR)/*.tst)
+TARGET_TEST = $(wildcard $(TARGET_DIR)/*.tst)
 
 all: $(TARGET)
 .PHONY: all
@@ -27,16 +27,36 @@ all: $(TARGET)
 clean:
 .PHONY: clean
 
-test: $(patsubst $(TARGET_DIR)/%.tst,test-%,$(TEST))
+test: $(patsubst $(TARGET_DIR)/%.tst,test-%,$(TARGET_TEST)) $(patsubst $(TARGET_DIR)/%.asm,test-asm-%,$(TARGET_ASM) $(wildcard $(TARGET_DIR)/*.asm))
 .PHONY: test
 
 test-%: $(TARGET_DIR)/%.tst $(TARGET)
 	$(GIT_CDUP)/misc/run_test $<
 .PHONY: test-%
-.PRECIOUS: $(TARGET_DIR)/%.ok
+
+test-asm-%: $(TARGET_DIR)/hasm/%.hack $(TARGET_DIR)/Assembler/%.hack
+	diff -u $^
 
 $(TARGET_DIR)/%.hack: $(TARGET_DIR)/%.asm
+	cargo run --release --bin hasm -- $<
+
+$(TARGET_DIR)/hasm/%.hack: $(TARGET_DIR)/hasm/%.asm
+	cargo run --release --bin hasm -- $<
+.PRECIOUS: $(TARGET_DIR)/hasm/%.hack
+
+$(TARGET_DIR)/Assembler/%.hack: $(TARGET_DIR)/Assembler/%.asm
 	$(GIT_CDUP)/tools/Assembler $(abspath $<)
+.PRECIOUS: $(TARGET_DIR)/Assembler/%.hack
+
+$(TARGET_DIR)/hasm/%.asm: $(TARGET_DIR)/%.asm
+	mkdir -p $(dir $@)
+	cp $< $@
+.PRECIOUS: $(TARGET_DIR)/hasm/%.asm
+
+$(TARGET_DIR)/Assembler/%.asm: $(TARGET_DIR)/%.asm
+	mkdir -p $(dir $@)
+	cp $< $@
+.PRECIOUS: $(TARGET_DIR)/Assembler/%.asm
 
 $(TARGET_DIR)/%.hdl: %.hdl
 	cp $< $@

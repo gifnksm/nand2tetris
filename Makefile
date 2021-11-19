@@ -14,7 +14,7 @@ clean: $(patsubst %,clean-%,$(SUBDIRS))
 	$(RM) -r target
 .PHONY: clean
 
-test: $(patsubst %,test-%,$(SUBDIRS))
+test: $(patsubst %,test-%,$(SUBDIRS)) test-cargo
 .PHONY: test
 
 setup: tools
@@ -37,6 +37,10 @@ clean-%:
 test-%: tools
 	$(MAKE) -C $(patsubst test-%,%,$@) test
 .PHONY: test-%
+
+test-cargo:
+	cargo test
+.PHONY: test-cargo
 
 target/nand2tetris.zip: | target/
 	curl -L -o $@ "https://drive.google.com/uc?export=download&id=1xZzcMIUETv3u3sdpM_oTJSTetpVee3KZ"
