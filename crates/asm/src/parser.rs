@@ -2,45 +2,26 @@ use crate::{
     stmt::{Statement, StatementKind},
     Comp, Dest, Error, ErrorKind, Imm, InstC, Jump,
 };
-use std::{io::BufRead, path::PathBuf, sync::Arc};
+use std::io::BufRead;
 
-#[derive(Debug)]
-pub(crate) struct Parser<R> {
-    filename: Arc<PathBuf>,
-    reader: R,
-}
+pub(crate) fn parse(mut reader: impl BufRead) -> Result<Vec<Statement>, Error> {
+    let mut stmts = vec![];
+    let mut line_buf = String::new();
+    for line in 1.. {
+        line_buf.clear();
+        let res = reader
+            .read_line(&mut line_buf)
+            .map_err(|e| Error::new(line, e))?;
+        if res == 0 {
+            break;
+        }
 
-impl<R> Parser<R>
-where
-    R: BufRead,
-{
-    pub(crate) fn new(filename: impl Into<PathBuf>, reader: R) -> Self {
-        Self {
-            filename: Arc::new(filename.into()),
-            reader,
+        if let Some(stmt) = parse_line(&line_buf).map_err(|e| Error::new(line, e))? {
+            stmts.push(Statement::new(line, stmt));
         }
     }
 
-    pub(crate) fn parse(mut self) -> Result<Vec<Statement>, Error> {
-        let mut stmts = vec![];
-        let mut line_buf = String::new();
-        for line in 1.. {
-            line_buf.clear();
-            let res = self
-                .reader
-                .read_line(&mut line_buf)
-                .map_err(|e| Error::new(line, e))?;
-            if res == 0 {
-                break;
-            }
-
-            if let Some(stmt) = parse_line(&line_buf).map_err(|e| Error::new(line, e))? {
-                stmts.push(Statement::new(line, stmt));
-            }
-        }
-
-        Ok(stmts)
-    }
+    Ok(stmts)
 }
 
 fn parse_line(line: &str) -> Result<Option<StatementKind>, ErrorKind> {

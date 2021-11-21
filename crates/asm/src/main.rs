@@ -1,9 +1,10 @@
 use color_eyre::eyre::{ensure, eyre, Context, Result};
+use hasm::Instruction;
 use std::{
     env,
     fs::File,
     io::{prelude::*, BufReader, BufWriter},
-    path::PathBuf,
+    path::{Path, PathBuf},
 };
 use tempfile::NamedTempFile;
 
@@ -22,32 +23,17 @@ fn main() -> Result<()> {
         output_dir,
     } = parse_args()?;
 
-    // Read input file
-    let input = File::open(&input_path)
-        .wrap_err_with(|| format!("failed to open file: {}", input_path.display()))?;
-    let mut reader = BufReader::new(input);
-
-    // Parse input file
-    let insts = hasm::parse(&input_path, &mut reader)
+    let reader = open_input_file(&input_path)
+        .wrap_err_with(|| format!("failed to open input file: {}", input_path.display()))?;
+    let insts = hasm::parse(reader)
         .wrap_err_with(|| format!("failed to parse file: {}", input_path.display()))?;
-
-    // Write output file
-    let output = NamedTempFile::new_in(&output_dir).wrap_err("failed to create temporary file")?;
-    let mut writer = BufWriter::new(output);
-
-    for inst in &insts {
-        writeln!(&mut writer, "{:016b}", inst.encode()).wrap_err(format!(
-            "failed to write output file: {}",
-            output_path.display()
-        ))?;
-    }
-
-    let output = writer
-        .into_inner()
-        .wrap_err_with(|| format!("failed to write output file: {}", output_path.display()))?;
-
-    output
-        .persist(&output_path)
+    let writer = create_output_file(&output_dir).wrap_err_with(|| {
+        format!(
+            "failed to create output file in directory: {}",
+            &output_dir.display()
+        )
+    })?;
+    write_output_file(&output_dir, writer, &insts)
         .wrap_err_with(|| format!("failed to write output file: {}", output_path.display()))?;
 
     Ok(())
@@ -74,4 +60,31 @@ fn parse_args() -> Result<Params> {
         output_path,
         output_dir,
     })
+}
+
+fn open_input_file(input_path: &Path) -> Result<BufReader<File>> {
+    let input = File::open(input_path)
+        .wrap_err_with(|| format!("failed to open file: {}", input_path.display()))?;
+    let reader = BufReader::new(input);
+
+    Ok(reader)
+}
+
+fn create_output_file(output_dir: &Path) -> Result<BufWriter<NamedTempFile>> {
+    let output = NamedTempFile::new_in(&output_dir)?;
+    Ok(BufWriter::new(output))
+}
+
+fn write_output_file(
+    output_path: &Path,
+    mut writer: BufWriter<NamedTempFile>,
+    insts: &[Instruction],
+) -> Result<()> {
+    for inst in insts {
+        writeln!(&mut writer, "{:016b}", inst.encode())?;
+    }
+
+    writer.into_inner()?.persist(&output_path)?;
+
+    Ok(())
 }
