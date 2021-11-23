@@ -2,6 +2,7 @@ use std::io::BufRead;
 
 pub use error::*;
 pub use inst::*;
+pub use stmt::*;
 
 mod error;
 mod inst;
@@ -17,7 +18,7 @@ where
     let sym_tab = sym_tab::from_stmts(&stmts)?;
     let insts = stmts
         .into_iter()
-        .filter_map(|stmt| stmt.kind().to_inst(&sym_tab))
+        .filter_map(|stmt| stmt.data().to_inst(&sym_tab))
         .collect();
     Ok(insts)
 }

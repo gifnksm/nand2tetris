@@ -1,10 +1,12 @@
 use std::io;
 use thiserror::Error;
 
+use crate::Label;
+
 pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug, Error)]
-#[error("syntax erorr at line {}", line)]
+#[error("syntax error at line {}", line)]
 pub struct Error {
     line: u32,
     #[source]
@@ -28,7 +30,7 @@ impl Error {
 
 #[derive(Debug, Error)]
 pub enum ErrorKind {
-    #[error("IO error: {}", _0)]
+    #[error("IO error")]
     Io(#[from] io::Error),
     #[error("too large number: {}", _0)]
     TooLargeNumber(String),
@@ -45,7 +47,7 @@ pub enum ErrorKind {
     #[error("invalid C statement: invalid jump: {}", _0)]
     InvalidCStatementJump(String),
     #[error("duplicated label: {}", _0)]
-    DuplicateLabel(String),
+    DuplicateLabel(Label),
     #[error("too many symbols: {}", _0)]
     TooManySymbols(String),
 }

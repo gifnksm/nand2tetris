@@ -1,10 +1,6 @@
-use std::collections::HashMap;
-
-use crate::{
-    stmt::{Statement, StatementKind},
-    Error, ErrorKind, Imm,
-};
+use crate::{Error, ErrorKind, Imm, Label, Statement, StatementWithLine};
 use indexmap::{map::Entry, IndexMap};
+use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
 enum Symbol {
@@ -13,21 +9,18 @@ enum Symbol {
 }
 
 impl Symbol {
-    fn update(&mut self, line: u32, name: &str, imm: Imm) -> Result<(), Error> {
+    fn update(&mut self, line: u32, name: &Label, imm: Imm) -> Result<(), Error> {
         match self {
             Symbol::Undefined { .. } => {
                 *self = Symbol::Imm(imm);
                 Ok(())
             }
-            Symbol::Imm(_) => Err(Error::new(
-                line,
-                ErrorKind::DuplicateLabel(name.to_string()),
-            )),
+            Symbol::Imm(_) => Err(Error::new(line, ErrorKind::DuplicateLabel(name.clone()))),
         }
     }
 }
 
-pub(crate) fn from_stmts(stmts: &[Statement]) -> Result<HashMap<String, Imm>, Error> {
+pub(crate) fn from_stmts(stmts: &[StatementWithLine]) -> Result<HashMap<String, Imm>, Error> {
     let mut symbol_map = predefined_map();
     insert_symbols(&mut symbol_map, stmts)?;
     let map = create_map(symbol_map)?;
@@ -36,63 +29,66 @@ pub(crate) fn from_stmts(stmts: &[Statement]) -> Result<HashMap<String, Imm>, Er
 
 fn predefined_map() -> IndexMap<String, Symbol> {
     let predefined = &[
-        ("SP", 0),
-        ("LCL", 1),
-        ("ARG", 2),
-        ("THIS", 3),
-        ("THAT", 4),
-        ("R0", 0),
-        ("R1", 1),
-        ("R2", 2),
-        ("R3", 3),
-        ("R4", 4),
-        ("R5", 5),
-        ("R6", 6),
-        ("R7", 7),
-        ("R8", 8),
-        ("R9", 9),
-        ("R10", 10),
-        ("R11", 11),
-        ("R12", 12),
-        ("R13", 13),
-        ("R14", 14),
-        ("R15", 15),
-        ("SCREEN", 0x4000),
-        ("KBD", 0x6000),
+        (Label::SP, Imm::SP),
+        (Label::LCL, Imm::LCL),
+        (Label::ARG, Imm::ARG),
+        (Label::THIS, Imm::THIS),
+        (Label::THAT, Imm::THAT),
+        (Label::R0, Imm::R0),
+        (Label::R1, Imm::R1),
+        (Label::R2, Imm::R2),
+        (Label::R3, Imm::R3),
+        (Label::R4, Imm::R4),
+        (Label::R5, Imm::R5),
+        (Label::R6, Imm::R6),
+        (Label::R7, Imm::R7),
+        (Label::R8, Imm::R8),
+        (Label::R9, Imm::R9),
+        (Label::R10, Imm::R10),
+        (Label::R11, Imm::R11),
+        (Label::R12, Imm::R12),
+        (Label::R13, Imm::R13),
+        (Label::R14, Imm::R14),
+        (Label::R15, Imm::R15),
+        (Label::SCREEN, Imm::SCREEN),
+        (Label::KBD, Imm::KBD),
     ];
     let mut map = IndexMap::new();
     for (name, value) in predefined {
-        map.insert(name.to_string(), Symbol::Imm(Imm::try_new(*value).unwrap()));
+        map.insert(name.to_string(), Symbol::Imm(*value));
     }
     map
 }
 
-fn insert_symbols(map: &mut IndexMap<String, Symbol>, stmts: &[Statement]) -> Result<(), Error> {
+fn insert_symbols(
+    map: &mut IndexMap<String, Symbol>,
+    stmts: &[StatementWithLine],
+) -> Result<(), Error> {
     let mut inst_count = 0;
     for stmt in stmts {
         let line = stmt.line();
-        let kind = stmt.kind();
+        let kind = stmt.data();
         if kind.is_inst() {
             inst_count += 1;
         }
 
         match kind {
-            StatementKind::Label(name) => {
+            Statement::Label(name) => {
                 let imm = Imm::try_new(inst_count).ok_or_else(|| {
                     Error::new(stmt.line(), ErrorKind::TooFarLabel(name.to_string()))
                 })?;
-                match map.entry(name.clone()) {
+                match map.entry(name.to_string()) {
                     Entry::Occupied(mut e) => e.get_mut().update(stmt.line(), name, imm)?,
                     Entry::Vacant(e) => {
                         let _ = e.insert(Symbol::Imm(imm));
                     }
                 }
             }
-            StatementKind::AtLabel(name) => {
-                map.entry(name.clone())
+            Statement::AtLabel(name) => {
+                map.entry(name.to_string())
                     .or_insert(Symbol::Undefined { line });
             }
-            StatementKind::A(_) | StatementKind::C(_) => {}
+            Statement::A(_) | Statement::C(_) => {}
         }
     }
 

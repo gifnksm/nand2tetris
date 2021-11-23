@@ -21,6 +21,8 @@ TARGET=$(TARGET_HACK) $(TARGET_ASM) $(TARGET_HDL) $(TARGET_TSTIGNORE)
 
 TARGET_TEST = $(wildcard $(TARGET_DIR)/*.tst)
 
+HASM=$(GIT_CDUP)/target/release/hasm
+
 all: $(TARGET)
 .PHONY: all
 
@@ -37,11 +39,11 @@ test-%: $(TARGET_DIR)/%.tst $(TARGET)
 test-asm-%: $(TARGET_DIR)/hasm/%.hack $(TARGET_DIR)/Assembler/%.hack
 	diff -u $^
 
-$(TARGET_DIR)/%.hack: $(TARGET_DIR)/%.asm
-	cargo run --release --bin hasm -- $<
+$(TARGET_DIR)/%.hack: $(TARGET_DIR)/%.asm $(HASM)
+	$(HASM) $<
 
 $(TARGET_DIR)/hasm/%.hack: $(TARGET_DIR)/hasm/%.asm
-	cargo run --release --bin hasm -- $<
+	$(HASM) $<
 .PRECIOUS: $(TARGET_DIR)/hasm/%.hack
 
 $(TARGET_DIR)/Assembler/%.hack: $(TARGET_DIR)/Assembler/%.asm
@@ -65,3 +67,7 @@ $(TARGET_DIR)/%.asm: %.asm
 
 $(TARGET_DIR)/.tstignore: .tstignore
 	cp $< $@
+
+$(HASM):
+	cargo build --release --bin hasm
+.PHONY: $(HASM)

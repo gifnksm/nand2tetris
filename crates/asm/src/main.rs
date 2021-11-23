@@ -33,7 +33,7 @@ fn main() -> Result<()> {
             &output_dir.display()
         )
     })?;
-    write_output_file(&output_dir, writer, &insts)
+    write_output_file(&output_path, writer, &insts)
         .wrap_err_with(|| format!("failed to write output file: {}", output_path.display()))?;
 
     Ok(())

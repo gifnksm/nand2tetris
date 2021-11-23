@@ -24,12 +24,44 @@ impl Instruction {
             }
         }
     }
+
+    pub fn a(imm: Imm) -> Self {
+        Instruction::A(imm)
+    }
+
+    pub fn c(dest: Dest, comp: Comp, jump: Jump) -> Self {
+        Instruction::C(InstC { dest, comp, jump })
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Imm(u16);
 
 impl Imm {
+    pub const SP: Self = Imm(0);
+    pub const LCL: Self = Imm(1);
+    pub const ARG: Self = Imm(2);
+    pub const THIS: Self = Imm(3);
+    pub const THAT: Self = Imm(4);
+    pub const R0: Self = Imm(0);
+    pub const R1: Self = Imm(1);
+    pub const R2: Self = Imm(2);
+    pub const R3: Self = Imm(3);
+    pub const R4: Self = Imm(4);
+    pub const R5: Self = Imm(5);
+    pub const R6: Self = Imm(6);
+    pub const R7: Self = Imm(7);
+    pub const R8: Self = Imm(8);
+    pub const R9: Self = Imm(9);
+    pub const R10: Self = Imm(10);
+    pub const R11: Self = Imm(11);
+    pub const R12: Self = Imm(12);
+    pub const R13: Self = Imm(13);
+    pub const R14: Self = Imm(14);
+    pub const R15: Self = Imm(15);
+    pub const SCREEN: Self = Imm(0x4000);
+    pub const KBD: Self = Imm(0x6000);
+
     pub fn try_new(value: u16) -> Option<Self> {
         if value > 0x7FFF {
             None
@@ -191,26 +223,26 @@ impl fmt::Display for Dest {
 #[repr(u8)]
 pub enum Jump {
     Null = 0b000,
-    JGT = 0b001,
-    JEQ = 0b010,
-    JGE = 0b011,
-    JLT = 0b100,
-    JNE = 0b101,
-    JLE = 0b110,
-    JMP = 0b111,
+    Gt = 0b001,
+    Eq = 0b010,
+    Ge = 0b011,
+    Lt = 0b100,
+    Ne = 0b101,
+    Le = 0b110,
+    Jmp = 0b111,
 }
 
 impl fmt::Display for Jump {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let s = match self {
             Jump::Null => "",
-            Jump::JGT => "JGT",
-            Jump::JEQ => "JEQ",
-            Jump::JGE => "JGE",
-            Jump::JLT => "JLT",
-            Jump::JNE => "JNE",
-            Jump::JLE => "JLE",
-            Jump::JMP => "JMP",
+            Jump::Gt => "JGT",
+            Jump::Eq => "JEQ",
+            Jump::Ge => "JGE",
+            Jump::Lt => "JLT",
+            Jump::Ne => "JNE",
+            Jump::Le => "JLE",
+            Jump::Jmp => "JMP",
         };
         write!(f, "{}", s)
     }

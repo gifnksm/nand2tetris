@@ -1,10 +1,7 @@
-use crate::{
-    stmt::{Statement, StatementKind},
-    Comp, Dest, Error, ErrorKind, Imm, InstC, Jump,
-};
+use crate::{Comp, Dest, Error, ErrorKind, Imm, InstC, Jump, Label, Statement, StatementWithLine};
 use std::io::BufRead;
 
-pub(crate) fn parse(mut reader: impl BufRead) -> Result<Vec<Statement>, Error> {
+pub(crate) fn parse(mut reader: impl BufRead) -> Result<Vec<StatementWithLine>, Error> {
     let mut stmts = vec![];
     let mut line_buf = String::new();
     for line in 1.. {
@@ -17,14 +14,14 @@ pub(crate) fn parse(mut reader: impl BufRead) -> Result<Vec<Statement>, Error> {
         }
 
         if let Some(stmt) = parse_line(&line_buf).map_err(|e| Error::new(line, e))? {
-            stmts.push(Statement::new(line, stmt));
+            stmts.push(StatementWithLine::new(line, stmt));
         }
     }
 
     Ok(stmts)
 }
 
-fn parse_line(line: &str) -> Result<Option<StatementKind>, ErrorKind> {
+fn parse_line(line: &str) -> Result<Option<Statement>, ErrorKind> {
     let line = trim_spaces_or_comment(line);
     if line.is_empty() {
         return Ok(None);
@@ -115,12 +112,12 @@ fn read_token(s: &str) -> Option<(Token, &str)> {
     ch.map(|ch| (Token::Punct(ch), cs.as_str().trim()))
 }
 
-fn try_parse_label_statement(s: &str) -> Result<Option<StatementKind>, ErrorKind> {
+fn try_parse_label_statement(s: &str) -> Result<Option<Statement>, ErrorKind> {
     let s = s.trim();
 
     if let Some((Token::Punct('('), rest)) = read_token(s) {
         if let Some((Token::Symbol(label), ")")) = read_token(rest) {
-            return Ok(Some(StatementKind::Label(label.to_string())));
+            return Ok(Some(Statement::Label(Label::from(label))));
         }
         return Err(ErrorKind::InvalidLabelStatement(s.into()));
     }
@@ -128,13 +125,13 @@ fn try_parse_label_statement(s: &str) -> Result<Option<StatementKind>, ErrorKind
     Ok(None)
 }
 
-fn try_parse_a_statement(s: &str) -> Result<Option<StatementKind>, ErrorKind> {
+fn try_parse_a_statement(s: &str) -> Result<Option<Statement>, ErrorKind> {
     let s = s.trim();
 
     if let Some((Token::Punct('@'), rest)) = read_token(s) {
         match read_token(rest) {
             Some((Token::Symbol(sym), "")) => {
-                return Ok(Some(StatementKind::AtLabel(sym.into())));
+                return Ok(Some(Statement::AtLabel(Label::from(sym))));
             }
             Some((Token::Number(num), "")) => {
                 let value = num
@@ -143,7 +140,7 @@ fn try_parse_a_statement(s: &str) -> Result<Option<StatementKind>, ErrorKind> {
                     .and_then(|value| {
                         Imm::try_new(value).ok_or_else(|| ErrorKind::TooLargeNumber(num.into()))
                     })?;
-                return Ok(Some(StatementKind::A(value)));
+                return Ok(Some(Statement::A(value)));
             }
             _ => {}
         }
@@ -232,24 +229,24 @@ fn parse_comp(s: &str) -> Result<Comp, ErrorKind> {
 fn parse_jump(s: &str) -> Result<Jump, ErrorKind> {
     let jump = match s.trim() {
         "" => Jump::Null,
-        "JGT" => Jump::JGT,
-        "JEQ" => Jump::JEQ,
-        "JGE" => Jump::JGE,
-        "JLT" => Jump::JLT,
-        "JNE" => Jump::JNE,
-        "JLE" => Jump::JLE,
-        "JMP" => Jump::JMP,
+        "JGT" => Jump::Gt,
+        "JEQ" => Jump::Eq,
+        "JGE" => Jump::Ge,
+        "JLT" => Jump::Lt,
+        "JNE" => Jump::Ne,
+        "JLE" => Jump::Le,
+        "JMP" => Jump::Jmp,
         _ => return Err(ErrorKind::InvalidCStatementJump(s.into())),
     };
     Ok(jump)
 }
 
-fn parse_c_statement(s: &str) -> Result<StatementKind, ErrorKind> {
+fn parse_c_statement(s: &str) -> Result<Statement, ErrorKind> {
     let parts = split_into_parts(s.trim());
     let dest = parse_dest(parts.dest)?;
     let comp = parse_comp(parts.comp)?;
     let jump = parse_jump(parts.jump)?;
-    Ok(StatementKind::C(InstC::new(dest, comp, jump)))
+    Ok(Statement::C(InstC::new(dest, comp, jump)))
 }
 
 #[cfg(test)]
@@ -310,17 +307,11 @@ mod tests {
     fn try_parse_label_statement() {
         use super::try_parse_label_statement as t;
         assert_eq!(t("").unwrap(), None);
-        assert_eq!(
-            t("(foo)").unwrap(),
-            Some(StatementKind::Label("foo".into()))
-        );
-        assert_eq!(
-            t("(f123)").unwrap(),
-            Some(StatementKind::Label("f123".into()))
-        );
+        assert_eq!(t("(foo)").unwrap(), Some(Statement::Label("foo".into())));
+        assert_eq!(t("(f123)").unwrap(), Some(Statement::Label("f123".into())));
         assert_eq!(
             t("  ( f123  )").unwrap(),
-            Some(StatementKind::Label("f123".into()))
+            Some(Statement::Label("f123".into()))
         );
 
         assert!(matches!(
@@ -337,17 +328,14 @@ mod tests {
     fn try_parse_a_statement() {
         use super::try_parse_a_statement as t;
         assert_eq!(t("").unwrap(), None);
-        assert_eq!(
-            t("@foo").unwrap(),
-            Some(StatementKind::AtLabel("foo".into()))
-        );
+        assert_eq!(t("@foo").unwrap(), Some(Statement::AtLabel("foo".into())));
         assert_eq!(
             t("@  fo_:.$o  ").unwrap(),
-            Some(StatementKind::AtLabel("fo_:.$o".into()))
+            Some(Statement::AtLabel("fo_:.$o".into()))
         );
         assert_eq!(
             t("@1234").unwrap(),
-            Some(StatementKind::A(Imm::try_new(1234).unwrap()))
+            Some(Statement::A(Imm::try_new(1234).unwrap()))
         );
         assert!(matches!(t("@65535"), Err(ErrorKind::TooLargeNumber(s)) if s == "65535"));
         assert!(matches!(t("@0x123"), Err(ErrorKind::InvalidAStatement(s)) if s == "@0x123"));
@@ -414,15 +402,15 @@ mod tests {
     fn parse_jump() {
         use super::parse_jump as p;
         assert_eq!(p("").unwrap(), Jump::Null);
-        assert_eq!(p("JGT").unwrap(), Jump::JGT);
-        assert_eq!(p("JEQ").unwrap(), Jump::JEQ);
-        assert_eq!(p("JGE").unwrap(), Jump::JGE);
-        assert_eq!(p("JLT").unwrap(), Jump::JLT);
-        assert_eq!(p("JNE").unwrap(), Jump::JNE);
-        assert_eq!(p("JLE").unwrap(), Jump::JLE);
-        assert_eq!(p("JMP").unwrap(), Jump::JMP);
+        assert_eq!(p("JGT").unwrap(), Jump::Gt);
+        assert_eq!(p("JEQ").unwrap(), Jump::Eq);
+        assert_eq!(p("JGE").unwrap(), Jump::Ge);
+        assert_eq!(p("JLT").unwrap(), Jump::Lt);
+        assert_eq!(p("JNE").unwrap(), Jump::Ne);
+        assert_eq!(p("JLE").unwrap(), Jump::Le);
+        assert_eq!(p("JMP").unwrap(), Jump::Jmp);
 
-        assert_eq!(p("  JLE  ").unwrap(), Jump::JLE);
+        assert_eq!(p("  JLE  ").unwrap(), Jump::Le);
 
         assert!(matches!(p("JGTJEQ"), Err(ErrorKind::InvalidCStatementJump(s)) if s == "JGTJEQ"));
         assert!(matches!(p("J GT"), Err(ErrorKind::InvalidCStatementJump(s)) if s == "J GT"));
@@ -431,12 +419,12 @@ mod tests {
     #[test]
     fn parse_c_statement() {
         use super::parse_c_statement as p;
-        fn s(dest: Dest, comp: Comp, jump: Jump) -> StatementKind {
-            StatementKind::C(InstC::new(dest, comp, jump))
+        fn s(dest: Dest, comp: Comp, jump: Jump) -> Statement {
+            Statement::C(InstC::new(dest, comp, jump))
         }
 
         assert_eq!(p("0").unwrap(), s(Dest::Null, Comp::Zero, Jump::Null));
-        assert_eq!(p("M = 0; JLT").unwrap(), s(Dest::M, Comp::Zero, Jump::JLT));
+        assert_eq!(p("M = 0; JLT").unwrap(), s(Dest::M, Comp::Zero, Jump::Lt));
 
         assert!(matches!(p(""), Err(ErrorKind::InvalidCStatementComp(s)) if s.is_empty()));
         assert!(matches!(p("X"), Err(ErrorKind::InvalidCStatementComp(s)) if s == "X"));
@@ -449,11 +437,7 @@ mod tests {
         assert_eq!(p("// foo").unwrap(), None);
         assert_eq!(
             p("M=M+1;JEQ // comment").unwrap(),
-            Some(StatementKind::C(InstC::new(
-                Dest::M,
-                Comp::MPlusOne,
-                Jump::JEQ
-            )))
+            Some(Statement::C(InstC::new(Dest::M, Comp::MPlusOne, Jump::Eq)))
         );
     }
 }
