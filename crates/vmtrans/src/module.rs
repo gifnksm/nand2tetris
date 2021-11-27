@@ -50,9 +50,9 @@ impl Module {
                 .read_line(&mut line_buf)
                 .map_err(|e| Error::ParseModule(name.clone(), ParseModuleError::new(line, e)))?;
             if res == 0 {
-                labels
-                    .finish(line)
-                    .map_err(|e| Error::ParseModule(name.clone(), e))?;
+                labels.finish().map_err(|e| {
+                    Error::ParseModule(name.clone(), ParseModuleError::new(line, e))
+                })?;
                 break;
             }
 
@@ -65,9 +65,9 @@ impl Module {
                         labels.use_(label, line);
                         Ok(())
                     }
-                    Command::Function(function_name, _arity) => {
-                        functions.define(function_name, &name, line)
-                    }
+                    Command::Function(function_name, _arity) => labels
+                        .finish()
+                        .and_then(|()| functions.define(function_name, &name, line)),
                     Command::Call(function_name, _arity) => {
                         functions.call(function_name, &name, line)
                     }
@@ -87,9 +87,13 @@ impl Module {
     }
 
     pub(crate) fn translate(&self) -> Vec<Statement> {
+        let mut func_name = "$toplevel";
         let mut stmts = vec![];
         for (index, command) in self.commands.iter().enumerate() {
-            stmts.extend(command.translate(&self.name, index));
+            if let Command::Function(name, _) = command {
+                func_name = name.as_str();
+            }
+            stmts.extend(command.translate(&self.name, func_name, index));
         }
         stmts
     }
@@ -198,14 +202,13 @@ impl LabelTable {
         }
     }
 
-    fn finish(&mut self, line: u32) -> Result<(), ParseModuleError> {
+    fn finish(&mut self) -> Result<(), ParseModuleErrorKind> {
         self.labels
             .drain()
             .filter_map(|(label, state)| match (state.defined, state.used) {
-                (None, Some(used_line)) => Some(Err(ParseModuleError::new(
-                    line,
-                    ParseModuleErrorKind::LabelNotDefined(label, used_line),
-                ))),
+                (None, Some(used_line)) => {
+                    Some(Err(ParseModuleErrorKind::LabelNotDefined(label, used_line)))
+                }
                 _ => None,
             })
             .next()

@@ -28,7 +28,7 @@ impl Executable {
     }
 
     pub fn translate(&self) -> Vec<Statement> {
-        let mut gen = CodeGen::new("$builtin", 0);
+        let mut gen = CodeGen::new("$builtin", "bootstrap", 0);
         if let Some(entry_point) = self.functions.get("Sys.init") {
             gen.bootstrap(entry_point);
         }

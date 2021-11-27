@@ -7,14 +7,14 @@ MAKEFLAGS += --no-builtin-rules
 
 SUBDIRS = $(wildcard [0-9][0-9])
 
-all: $(patsubst %,all-%,$(SUBDIRS))
+all: tools $(patsubst %,all-%,$(SUBDIRS))
 .PHONY: all
 
 clean: $(patsubst %,clean-%,$(SUBDIRS))
 	$(RM) -r target
 .PHONY: clean
 
-test: $(patsubst %,test-%,$(SUBDIRS)) test-cargo
+test: tools test-cargo $(patsubst %,test-%,$(SUBDIRS))
 .PHONY: test
 
 setup: tools

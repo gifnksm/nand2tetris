@@ -7,14 +7,16 @@ use hasm::{
 #[derive(Debug, Clone)]
 pub(crate) struct CodeGen<'a> {
     module_name: &'a str,
+    func_name: &'a str,
     command_index: usize,
     stmts: Vec<Statement>,
 }
 
 impl<'a> CodeGen<'a> {
-    pub(crate) fn new(module_name: &'a str, command_index: usize) -> Self {
+    pub(crate) fn new(module_name: &'a str, func_name: &'a str, command_index: usize) -> Self {
         Self {
             module_name,
+            func_name,
             command_index,
             stmts: vec![],
         }
@@ -211,8 +213,8 @@ impl<'a> CodeGen<'a> {
 
     fn make_internal_label(&self, op: &str, id: &str) -> Label {
         Label::from(format!(
-            "{}${}${}${}",
-            self.module_name, self.command_index, op, id
+            "{}${}${}${}${}",
+            self.module_name, self.func_name, self.command_index, op, id
         ))
     }
 
@@ -221,7 +223,12 @@ impl<'a> CodeGen<'a> {
     }
 
     fn make_label(&self, label: &Ident) -> Label {
-        Label::from(format!("{}.{}", self.module_name, label.as_str()))
+        Label::from(format!(
+            "{}.{}.{}",
+            self.module_name,
+            self.func_name,
+            label.as_str()
+        ))
     }
 
     fn make_function_label(&self, name: &Ident) -> Label {

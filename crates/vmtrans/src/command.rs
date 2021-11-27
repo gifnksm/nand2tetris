@@ -221,8 +221,13 @@ impl FromStr for Ident {
 }
 
 impl Command {
-    pub(crate) fn translate(&self, module_name: &str, index: usize) -> Vec<Statement> {
-        let mut gen = CodeGen::new(module_name, index);
+    pub(crate) fn translate(
+        &self,
+        module_name: &str,
+        func_name: &str,
+        index: usize,
+    ) -> Vec<Statement> {
+        let mut gen = CodeGen::new(module_name, func_name, index);
         match self {
             Command::Add => gen.binary_op(Comp::DPlusA),
             Command::Sub => gen.binary_op(Comp::AMinusD),
