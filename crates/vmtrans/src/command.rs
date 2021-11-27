@@ -1,9 +1,9 @@
 use crate::code_gen::CodeGen;
 use hasm::{Comp, Imm, Jump, Label, Statement};
-use std::{num::ParseIntError, str::FromStr};
+use std::{borrow::Borrow, num::ParseIntError, str::FromStr};
 use thiserror::Error;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Command {
     Add,
     Sub,
@@ -16,6 +16,12 @@ pub(crate) enum Command {
     Not,
     Push(Segment, Imm),
     Pop(Segment, Imm),
+    Label(Ident),
+    Goto(Ident),
+    IfGoto(Ident),
+    Function(Ident, u8),
+    Call(Ident, u8),
+    Return,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -45,6 +51,21 @@ impl Segment {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub(crate) struct Ident(String);
+
+impl Borrow<str> for Ident {
+    fn borrow(&self) -> &str {
+        &self.0
+    }
+}
+
+impl Ident {
+    pub(crate) fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
 #[derive(Debug, Error)]
 pub enum ParseCommandError {
     #[error("cannot parse command from empty string")]
@@ -55,7 +76,7 @@ pub enum ParseCommandError {
     TooFewArguments,
     #[error("too many arguments")]
     TooManyArguments,
-    #[error("invalid segment")]
+    #[error(transparent)]
     InvalidSegment(#[from] ParseSegmentError),
     #[error("invalid index: {}", _1)]
     InvalidIndex(#[source] ParseIntError, String),
@@ -63,6 +84,12 @@ pub enum ParseCommandError {
     TooLargeIndex(u16),
     #[error("invalid operand: {} {}", _0, _1)]
     InvalidOperand(String, String),
+    #[error(transparent)]
+    InvalidIdent(#[from] ParseIdentError),
+    #[error("invalid arity: {}", _1)]
+    InvalidArity(#[source] ParseIntError, String),
+    #[error("too large arity: {}", _0)]
+    TooLargeArity(u16),
 }
 
 impl FromStr for Command {
@@ -72,6 +99,8 @@ impl FromStr for Command {
         enum Kind {
             NoArg(Command),
             SegmentIndex(fn(Segment, Imm) -> Command),
+            Ident(fn(Ident) -> Command),
+            IdentArity(fn(Ident, u8) -> Command),
         }
         let mut cs = s.split_whitespace();
         let kind_str = cs.next().ok_or(Self::Err::Empty)?;
@@ -87,6 +116,12 @@ impl FromStr for Command {
             "not" => Kind::NoArg(Self::Not),
             "push" => Kind::SegmentIndex(Self::Push),
             "pop" => Kind::SegmentIndex(Self::Pop),
+            "label" => Kind::Ident(Self::Label),
+            "goto" => Kind::Ident(Self::Goto),
+            "if-goto" => Kind::Ident(Self::IfGoto),
+            "function" => Kind::IdentArity(Self::Function),
+            "call" => Kind::IdentArity(Self::Call),
+            "return" => Kind::NoArg(Self::Return),
             command => return Err(Self::Err::InvalidCommand(command.into())),
         };
 
@@ -96,15 +131,14 @@ impl FromStr for Command {
                 let segment_str = cs.next().ok_or(Self::Err::TooFewArguments)?;
                 let index_str = cs.next().ok_or(Self::Err::TooFewArguments)?;
 
-                let segment: Segment = segment_str.parse()?;
+                let segment = Segment::from_str(segment_str)?;
                 if kind_str == "pop" && segment == Segment::Constant {
                     return Err(Self::Err::InvalidOperand(
                         kind_str.into(),
                         segment_str.into(),
                     ));
                 }
-                let index = index_str
-                    .parse()
+                let index = u16::from_str(index_str)
                     .map_err(|e| Self::Err::InvalidIndex(e, index_str.into()))
                     .and_then(|idx| Imm::try_new(idx).ok_or(Self::Err::TooLargeIndex(idx)))?;
                 if !segment.is_valid_index(index) {
@@ -112,6 +146,21 @@ impl FromStr for Command {
                 }
 
                 f(segment, index)
+            }
+            Kind::Ident(f) => {
+                let label_str = cs.next().ok_or(Self::Err::TooFewArguments)?;
+                let label = Ident::from_str(label_str)?;
+                f(label)
+            }
+            Kind::IdentArity(f) => {
+                let function_str = cs.next().ok_or(Self::Err::TooFewArguments)?;
+                let arity_str = cs.next().ok_or(Self::Err::TooFewArguments)?;
+
+                let function = Ident::from_str(function_str)?;
+                let arity = u8::from_str(arity_str)
+                    .map_err(|e| Self::Err::InvalidArity(e, arity_str.into()))?;
+
+                f(function, arity)
             }
         };
 
@@ -148,6 +197,29 @@ impl FromStr for Segment {
     }
 }
 
+#[derive(Debug, Error)]
+pub enum ParseIdentError {
+    #[error("invalid ident: {}", _0)]
+    InvalidIdent(String),
+}
+
+impl FromStr for Ident {
+    type Err = ParseIdentError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut cs = s.chars();
+        let is_valid = cs
+            .next()
+            .map(|ch| ch.is_ascii_alphabetic() || ch == '_' || ch == '.' || ch == ':')
+            .unwrap_or(false)
+            && cs.all(|ch| ch.is_ascii_alphanumeric() || ch == '_' || ch == '.' || ch == ':');
+        if !is_valid {
+            return Err(Self::Err::InvalidIdent(s.into()));
+        }
+        Ok(Ident(s.into()))
+    }
+}
+
 impl Command {
     pub(crate) fn translate(&self, module_name: &str, index: usize) -> Vec<Statement> {
         let mut gen = CodeGen::new(module_name, index);
@@ -177,6 +249,12 @@ impl Command {
             Command::Pop(Segment::Temp, index) => gen.pop_fixed_segment(Imm::R5, *index),
             Command::Pop(Segment::Static, index) => gen.pop_static_segment(*index),
             Command::Pop(_, _) => unreachable!("{:?}", self),
+            Command::Label(label) => gen.label(label),
+            Command::Goto(label) => gen.goto(label),
+            Command::IfGoto(label) => gen.if_goto(label),
+            Command::Function(name, arity) => gen.function(name, *arity),
+            Command::Call(name, arity) => gen.call(name, *arity),
+            Command::Return => gen.return_(),
         }
         gen.into_statements()
     }
@@ -198,6 +276,18 @@ mod test {
         assert_eq!(Segment::from_str("temp").unwrap(), Segment::Temp);
         assert!(
             matches!(Segment::from_str("foo").unwrap_err(), ParseSegmentError::InvalidSegment(s) if s == "foo")
+        );
+    }
+
+    #[test]
+    fn parse_label() {
+        assert_eq!(Ident::from_str("foo").unwrap(), Ident("foo".into()));
+        assert_eq!(
+            Ident::from_str(".:_foo12").unwrap(),
+            Ident(".:_foo12".into())
+        );
+        assert!(
+            matches!(Ident::from_str("1foo").unwrap_err(), ParseIdentError::InvalidIdent(s) if s == "1foo")
         );
     }
 
@@ -258,10 +348,6 @@ mod test {
             Command::Pop(Segment::Static, zero)
         );
         assert_eq!(
-            Command::from_str("pop constant 0").unwrap(),
-            Command::Pop(Segment::Constant, zero)
-        );
-        assert_eq!(
             Command::from_str("pop this 0").unwrap(),
             Command::Pop(Segment::This, zero)
         );
@@ -276,6 +362,10 @@ mod test {
         assert_eq!(
             Command::from_str("pop temp 0").unwrap(),
             Command::Pop(Segment::Temp, zero)
+        );
+        assert_eq!(
+            Command::from_str("label foo").unwrap(),
+            Command::Label(Ident("foo".into()))
         );
 
         assert!(matches!(
@@ -304,6 +394,10 @@ mod test {
         assert!(matches!(
             Command::from_str("push argument 65535").unwrap_err(),
             ParseCommandError::TooLargeIndex(65535)
+        ));
+        assert!(matches!(
+            Command::from_str("pop constant 0").unwrap_err(),
+            ParseCommandError::InvalidOperand(op, opr) if op == "pop" && opr == "constant"
         ));
     }
 }

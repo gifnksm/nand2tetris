@@ -81,6 +81,12 @@ impl fmt::Display for Imm {
     }
 }
 
+impl From<u8> for Imm {
+    fn from(n: u8) -> Self {
+        Self(u16::from(n))
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct InstC {
     dest: Dest,

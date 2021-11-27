@@ -16,4 +16,11 @@ pub enum Error {
     ModuleOpen(PathBuf, #[source] io::Error),
     #[error("no modules found")]
     NoModules,
+    #[error(
+        "function is called but not defined: {} (first called at module {} line {})",
+        _0,
+        _1,
+        _2
+    )]
+    FunctionNotDefined(String, String, u32),
 }

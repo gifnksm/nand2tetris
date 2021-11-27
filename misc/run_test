@@ -31,7 +31,7 @@ case "${TYPE}" in
 *.asm)
     EXECUTABLE="${GIT_CDUP}/tools/CPUEmulator"
     ;;
-*.vm)
+*.vm | "")
     EXECUTABLE="${GIT_CDUP}/tools/VMEmulator"
     ;;
 *)
