@@ -1,6 +1,5 @@
-use asm::Executable;
+use asm::{hack::Instruction, Executable};
 use color_eyre::eyre::{ensure, eyre, Context, Result};
-use hack::Instruction;
 use std::{
     env,
     fs::File,

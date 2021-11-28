@@ -1,5 +1,5 @@
 use super::{Label, Statement};
-pub use hack::{Comp, Dest, InstC, Jump};
+use hack::{Comp, Dest, InstC, Jump};
 use hack::{Imm, Instruction};
 use std::collections::HashMap;
 

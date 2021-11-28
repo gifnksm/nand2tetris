@@ -1,5 +1,5 @@
 pub use self::parser::*;
-use hack::Imm;
+use asm::hack::Imm;
 use std::{borrow::Borrow, fmt};
 
 mod parser;

@@ -1,3 +1,4 @@
+pub use ::asm;
 pub use command::*;
 pub use executable::*;
 pub use module::*;

@@ -1,5 +1,5 @@
 pub use self::{assembler::*, parser::*};
-pub use hack::{Comp, Dest, InstC, Jump};
+use hack::{Comp, Dest, InstC, Jump};
 use std::{borrow::Cow, fmt, hash::Hash};
 
 mod assembler;

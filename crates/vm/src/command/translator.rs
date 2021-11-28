@@ -1,7 +1,9 @@
 use super::{Command, FuncName, Segment};
 use crate::{code_gen::CodeGen, ModuleName};
-use asm::{Label as AsmLabel, Statement};
-use hack::{Comp, Imm, Jump};
+use asm::{
+    hack::{Comp, Imm, Jump},
+    Label as AsmLabel, Statement,
+};
 
 impl Command {
     pub(crate) fn translate(

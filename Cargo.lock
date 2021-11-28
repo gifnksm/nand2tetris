@@ -149,7 +149,6 @@ version = "0.1.0"
 dependencies = [
  "asm",
  "color-eyre",
- "hack",
  "tempfile",
 ]
 
@@ -439,7 +438,6 @@ name = "vm"
 version = "0.1.0"
 dependencies = [
  "asm",
- "hack",
  "thiserror",
 ]
 
@@ -447,7 +445,6 @@ dependencies = [
 name = "vmtrans"
 version = "0.1.0"
 dependencies = [
- "asm",
  "color-eyre",
  "tempfile",
  "thiserror",

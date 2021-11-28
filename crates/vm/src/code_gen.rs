@@ -1,9 +1,9 @@
 use crate::{FuncName, Label, ModuleName};
 use asm::{
+    hack::{Comp, Dest, Imm, Jump},
     Label as AsmLabel,
     Statement::{self, self as S},
 };
-use hack::{Comp, Dest, Imm, Jump};
 
 #[derive(Debug)]
 pub(crate) struct CodeGen<'a> {

@@ -1,4 +1,3 @@
-use asm::Statement;
 use color_eyre::eyre::{ensure, eyre, Context, Result};
 use std::{
     env,
@@ -6,7 +5,7 @@ use std::{
     path::{Path, PathBuf},
 };
 use tempfile::NamedTempFile;
-use vm::Executable;
+use vm::{asm::Statement, Executable};
 
 #[derive(Debug)]
 struct Params {

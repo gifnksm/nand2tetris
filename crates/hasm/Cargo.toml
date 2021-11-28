@@ -9,5 +9,4 @@ description = "Hack assembler"
 [dependencies]
 asm = { path = "../asm" }
 color-eyre = "0.5.11"
-hack = { path = "../hack" }
 tempfile = "3.2.0"

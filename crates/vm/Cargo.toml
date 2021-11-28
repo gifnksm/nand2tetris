@@ -7,5 +7,4 @@ edition = "2021"
 
 [dependencies]
 asm = { path = "../asm" }
-hack = { path = "../hack" }
 thiserror = "1.0.30"
