@@ -4,31 +4,52 @@ use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
 enum Symbol {
-    Imm(Imm),
+    Defined(u32),
     Undefined { line: u32 },
 }
 
 impl Symbol {
-    fn update(&mut self, line: u32, name: &Label, imm: Imm) -> Result<(), Error> {
+    fn update(&mut self, line: u32, name: &Label, value: u32) -> Result<(), Error> {
         match self {
-            Symbol::Undefined { .. } => {
-                *self = Symbol::Imm(imm);
-                Ok(())
+            Symbol::Undefined { .. } => *self = Symbol::Defined(value),
+            Symbol::Defined(_) => {
+                return Err(Error::new(line, ErrorKind::DuplicateLabel(name.clone())))
             }
-            Symbol::Imm(_) => Err(Error::new(line, ErrorKind::DuplicateLabel(name.clone()))),
         }
+        Ok(())
     }
 }
 
-pub(crate) fn from_stmts(stmts: &[StatementWithLine]) -> Result<HashMap<String, Imm>, Error> {
+pub(crate) fn from_stmts(stmts: &[StatementWithLine]) -> Result<HashMap<String, u16>, Error> {
     let mut symbol_map = predefined_map();
-    insert_symbols(&mut symbol_map, stmts)?;
-    let map = create_map(symbol_map)?;
-    Ok(map)
+    let mut last_inst_count = insert_symbols(&mut symbol_map, stmts)?;
+    let mut map = create_map(symbol_map)?;
+
+    loop {
+        let (updated, inst_count) = update_map(&mut map, stmts);
+        if !updated && inst_count == last_inst_count {
+            break;
+        }
+        assert!(!updated || inst_count < last_inst_count);
+        last_inst_count = inst_count;
+    }
+
+    if last_inst_count > u32::from(u16::MAX) {
+        return Err(Error::new(0, ErrorKind::TooLargeProgram));
+    }
+    map.into_iter()
+        .map(|(k, v)| {
+            if let Ok(v) = u16::try_from(v) {
+                Ok((k, v))
+            } else {
+                Err(Error::new(0, ErrorKind::TooLargeProgram))
+            }
+        })
+        .collect()
 }
 
 fn predefined_map() -> IndexMap<String, Symbol> {
-    let predefined = &[
+    let predefined = [
         (Label::SP, Imm::SP),
         (Label::LCL, Imm::LCL),
         (Label::ARG, Imm::ARG),
@@ -55,35 +76,42 @@ fn predefined_map() -> IndexMap<String, Symbol> {
     ];
     let mut map = IndexMap::new();
     for (name, value) in predefined {
-        map.insert(name.to_string(), Symbol::Imm(*value));
+        map.insert(name.to_string(), Symbol::Defined(u32::from(value.value())));
     }
     map
+}
+
+fn inst_size_for_a(value: u32) -> u32 {
+    if value > u32::from(Imm::MAX.value()) {
+        2
+    } else {
+        1
+    }
 }
 
 fn insert_symbols(
     map: &mut IndexMap<String, Symbol>,
     stmts: &[StatementWithLine],
-) -> Result<(), Error> {
+) -> Result<u32, Error> {
     let mut inst_count = 0;
     for stmt in stmts {
         let line = stmt.line();
         let kind = stmt.data();
-        if kind.is_inst() {
-            inst_count += 1;
-        }
+        let inst_size = match kind {
+            Statement::Label(_) => 0,
+            Statement::AtLabel(_) => 2, // assume all @LABEL translates to 2 instructions
+            Statement::A(n) => inst_size_for_a(u32::from(*n)),
+            Statement::C(_) => 1,
+        };
+        inst_count += inst_size;
 
         match kind {
-            Statement::Label(name) => {
-                let imm = Imm::try_new(inst_count).ok_or_else(|| {
-                    Error::new(stmt.line(), ErrorKind::TooFarLabel(name.to_string()))
-                })?;
-                match map.entry(name.to_string()) {
-                    Entry::Occupied(mut e) => e.get_mut().update(stmt.line(), name, imm)?,
-                    Entry::Vacant(e) => {
-                        let _ = e.insert(Symbol::Imm(imm));
-                    }
+            Statement::Label(name) => match map.entry(name.to_string()) {
+                Entry::Occupied(mut e) => e.get_mut().update(stmt.line(), name, inst_count)?,
+                Entry::Vacant(e) => {
+                    let _ = e.insert(Symbol::Defined(inst_count));
                 }
-            }
+            },
             Statement::AtLabel(name) => {
                 map.entry(name.to_string())
                     .or_insert(Symbol::Undefined { line });
@@ -92,24 +120,49 @@ fn insert_symbols(
         }
     }
 
-    Ok(())
+    Ok(inst_count)
 }
 
-fn create_map(map: IndexMap<String, Symbol>) -> Result<HashMap<String, Imm>, Error> {
+fn create_map(map: IndexMap<String, Symbol>) -> Result<HashMap<String, u32>, Error> {
     let mut result = HashMap::new();
-    let mut imm_value = 0x0010;
+    let mut value = 0x0010;
     for (name, symbol) in map {
         match symbol {
-            Symbol::Imm(imm) => {
-                result.insert(name, imm);
+            Symbol::Defined(value) => {
+                result.insert(name, value);
             }
             Symbol::Undefined { line } => {
-                let imm = Imm::try_new(imm_value)
-                    .ok_or_else(|| Error::new(line, ErrorKind::TooManySymbols(name.to_string())))?;
-                imm_value += 1;
-                result.insert(name, imm);
+                if value > 255 {
+                    return Err(Error::new(line, ErrorKind::TooManySymbols(name)));
+                }
+                result.insert(name, value);
+                value += 1;
             }
         }
     }
     Ok(result)
+}
+
+fn update_map(map: &mut HashMap<String, u32>, stmts: &[StatementWithLine]) -> (bool, u32) {
+    let mut updated = false;
+    let mut inst_count = 0;
+    for stmt in stmts {
+        let kind = stmt.data();
+        let inst_size = match kind {
+            Statement::Label(_) => 0,
+            Statement::AtLabel(label) => inst_size_for_a(*map.get(label.as_str()).unwrap()),
+            Statement::A(n) => inst_size_for_a(u32::from(*n)),
+            Statement::C(_) => 1,
+        };
+        inst_count += inst_size;
+
+        // update by new value
+        if let Statement::Label(name) = kind {
+            let old = map.insert(name.to_string(), inst_count).unwrap();
+            if old != inst_count {
+                updated = true;
+            }
+        }
+    }
+    (updated, inst_count)
 }

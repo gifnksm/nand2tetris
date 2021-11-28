@@ -34,8 +34,8 @@ pub enum ErrorKind {
     Io(#[from] io::Error),
     #[error("too large number: {}", _0)]
     TooLargeNumber(String),
-    #[error("too far label: {}", _0)]
-    TooFarLabel(String),
+    #[error("too large program")]
+    TooLargeProgram,
     #[error("invalid label statement: {}", _0)]
     InvalidLabelStatement(String),
     #[error("invalid A statement: {}", _0)]

@@ -25,7 +25,7 @@ impl StatementWithLine {
 pub enum Statement {
     Label(Label),
     AtLabel(Label),
-    A(Imm),
+    A(u16),
     C(InstC),
 }
 
@@ -62,7 +62,7 @@ impl fmt::Display for Statement {
         match self {
             Statement::Label(label) => write!(f, "({})", label),
             Statement::AtLabel(label) => write!(f, "@{}", label),
-            Statement::A(a) => fmt::Display::fmt(a, f),
+            Statement::A(a) => write!(f, "@{}", a),
             Statement::C(c) => fmt::Display::fmt(c, f),
         }
     }
@@ -77,27 +77,33 @@ impl Statement {
         Self::AtLabel(label)
     }
 
-    pub fn a(imm: Imm) -> Self {
-        Self::A(imm)
+    pub fn a(a: u16) -> Self {
+        Self::A(a)
     }
 
     pub fn c(dest: Dest, comp: Comp, jump: Jump) -> Self {
         Self::C(InstC::new(dest, comp, jump))
     }
 
-    pub(crate) fn is_inst(&self) -> bool {
+    pub(crate) fn translate(&self, sym_tab: &HashMap<String, u16>, insts: &mut Vec<Instruction>) {
         match self {
-            Self::Label(_) => false,
-            Self::AtLabel(_) | Self::A(_) | Self::C(_) => true,
+            Self::Label(_) => {}
+            Self::AtLabel(label) => {
+                let imm = *sym_tab.get(label.as_str()).unwrap();
+                self.translate_a(imm, insts);
+            }
+            Self::C(c) => insts.push(Instruction::C(*c)),
+            Self::A(a) => self.translate_a(*a, insts),
         }
     }
 
-    pub(crate) fn to_inst(&self, sym_tab: &HashMap<String, Imm>) -> Option<Instruction> {
-        match self {
-            Self::Label(_) => None,
-            Self::AtLabel(label) => sym_tab.get(label.as_str()).map(|a| Instruction::A(*a)),
-            Self::C(c) => Some(Instruction::C(*c)),
-            Self::A(a) => Some(Instruction::A(*a)),
+    fn translate_a(&self, a: u16, insts: &mut Vec<Instruction>) {
+        if a <= Imm::MAX.value() {
+            insts.push(Instruction::A(Imm::try_new(a).unwrap()));
+        } else {
+            let not_a = !a;
+            insts.push(Instruction::A(Imm::try_new(not_a).unwrap()));
+            insts.push(Instruction::C(InstC::new(Dest::A, Comp::NotA, Jump::Null)));
         }
     }
 }

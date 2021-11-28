@@ -28,42 +28,42 @@ impl<'a> CodeGen<'a> {
     }
 
     pub(crate) fn bootstrap(&mut self, name: &FuncName) {
-        self.load_imm_d(Imm::try_new(256).unwrap());
+        self.load_imm_d(256);
         self.store_d_address(AsmLabel::SP);
         self.call(name, 0);
     }
 
-    pub(crate) fn push_imm(&mut self, imm: Imm) {
+    pub(crate) fn push_imm(&mut self, imm: u16) {
         self.load_imm_d(imm);
         self.push_d();
     }
 
-    pub(crate) fn push_dynamic_segment(&mut self, base_register: AsmLabel, index: Imm) {
+    pub(crate) fn push_dynamic_segment(&mut self, base_register: AsmLabel, index: u16) {
         self.load_dynamic_segment_d(base_register, index);
         self.push_d();
     }
 
-    pub(crate) fn push_fixed_segment(&mut self, register_index: Imm, index: Imm) {
+    pub(crate) fn push_fixed_segment(&mut self, register_index: Imm, index: u16) {
         self.load_fixed_segment_d(register_index, index);
         self.push_d();
     }
 
-    pub(crate) fn push_static_segment(&mut self, index: Imm) {
+    pub(crate) fn push_static_segment(&mut self, index: u16) {
         self.load_static_segment_d(index);
         self.push_d();
     }
 
-    pub(crate) fn pop_dynamic_segment(&mut self, base_register: AsmLabel, index: Imm) {
+    pub(crate) fn pop_dynamic_segment(&mut self, base_register: AsmLabel, index: u16) {
         self.pop_d();
         self.store_d_dynamic_segment(base_register, index);
     }
 
-    pub(crate) fn pop_fixed_segment(&mut self, register_index: Imm, index: Imm) {
+    pub(crate) fn pop_fixed_segment(&mut self, register_index: Imm, index: u16) {
         self.pop_d();
         self.store_d_fixed_segment(register_index, index);
     }
 
-    pub(crate) fn pop_static_segment(&mut self, index: Imm) {
+    pub(crate) fn pop_static_segment(&mut self, index: u16) {
         self.pop_d();
         self.store_d_static_segment(index);
     }
@@ -148,7 +148,7 @@ impl<'a> CodeGen<'a> {
         // RAM[ARG] = RAM[SP] - n - 5
         self.load_address_d(AsmLabel::SP);
         self.stmts.extend([
-            S::a(Imm::from(arity + 5)),
+            S::a(u16::from(arity) + 5),
             S::c(Dest::D, Comp::DMinusA, Jump::Null),
         ]);
         self.store_d_address(AsmLabel::ARG);
@@ -167,7 +167,7 @@ impl<'a> CodeGen<'a> {
             stmts.extend([
                 S::at_label(base),
                 S::c(Dest::D, Comp::M, Jump::Null),
-                S::a(Imm::from(n)),
+                S::a(u16::from(n)),
                 S::c(Dest::A, Comp::DMinusA, Jump::Null),
                 S::c(Dest::D, Comp::M, Jump::Null),
                 S::at_label(dest),
@@ -219,8 +219,8 @@ impl<'a> CodeGen<'a> {
         ))
     }
 
-    fn make_static_label(&self, index: Imm) -> AsmLabel {
-        AsmLabel::from(format!("{}.{}", self.module_name, index.value()))
+    fn make_static_label(&self, index: u16) -> AsmLabel {
+        AsmLabel::from(format!("{}.{}", self.module_name, index))
     }
 
     fn make_label(&self, label: &Label) -> AsmLabel {
@@ -231,7 +231,7 @@ impl<'a> CodeGen<'a> {
         AsmLabel::from(name.to_string())
     }
 
-    fn set_segment_addr_to_d(&mut self, base_register: AsmLabel, index: Imm) {
+    fn set_segment_addr_to_d(&mut self, base_register: AsmLabel, index: u16) {
         self.stmts.extend([
             S::at_label(base_register),
             S::c(Dest::D, Comp::M, Jump::Null),
@@ -240,7 +240,7 @@ impl<'a> CodeGen<'a> {
         ]);
     }
 
-    fn set_segment_addr_to_a(&mut self, base_register: AsmLabel, index: Imm) {
+    fn set_segment_addr_to_a(&mut self, base_register: AsmLabel, index: u16) {
         self.stmts.extend([
             S::at_label(base_register),
             S::c(Dest::D, Comp::M, Jump::Null),
@@ -257,7 +257,7 @@ impl<'a> CodeGen<'a> {
         self.stmts.push(S::c(Dest::D, Comp::Zero, Jump::Null));
     }
 
-    fn load_imm_d(&mut self, imm: Imm) {
+    fn load_imm_d(&mut self, imm: u16) {
         self.stmts.extend([
             // D = imm
             S::a(imm),
@@ -273,7 +273,7 @@ impl<'a> CodeGen<'a> {
         ]);
     }
 
-    fn load_dynamic_segment_d(&mut self, base_register: AsmLabel, index: Imm) {
+    fn load_dynamic_segment_d(&mut self, base_register: AsmLabel, index: u16) {
         // A = RAM[base_register] + index
         self.set_segment_addr_to_a(base_register, index);
         self.stmts.extend([
@@ -282,8 +282,8 @@ impl<'a> CodeGen<'a> {
         ]);
     }
 
-    fn load_fixed_segment_d(&mut self, register_index: Imm, index: Imm) {
-        let addr = Imm::try_new(register_index.value() + index.value()).unwrap();
+    fn load_fixed_segment_d(&mut self, register_index: Imm, index: u16) {
+        let addr = register_index.value() + index;
         self.stmts.extend([
             // D = RAM[addr]
             S::a(addr),
@@ -291,7 +291,7 @@ impl<'a> CodeGen<'a> {
         ]);
     }
 
-    fn load_static_segment_d(&mut self, index: Imm) {
+    fn load_static_segment_d(&mut self, index: u16) {
         let label = self.make_static_label(index);
 
         self.stmts.extend([
@@ -301,7 +301,7 @@ impl<'a> CodeGen<'a> {
         ]);
     }
 
-    fn store_d_dynamic_segment(&mut self, base_register: AsmLabel, index: Imm) {
+    fn store_d_dynamic_segment(&mut self, base_register: AsmLabel, index: u16) {
         self.stmts.extend([
             // RAM[R13] = D
             S::at_label(AsmLabel::R13),
@@ -324,8 +324,8 @@ impl<'a> CodeGen<'a> {
         ]);
     }
 
-    fn store_d_fixed_segment(&mut self, register_index: Imm, index: Imm) {
-        let addr = Imm::try_new(register_index.value() + index.value()).unwrap();
+    fn store_d_fixed_segment(&mut self, register_index: Imm, index: u16) {
+        let addr = register_index.value() + index;
         self.stmts.extend([
             // RAM[addr] = D
             S::a(addr),
@@ -333,7 +333,7 @@ impl<'a> CodeGen<'a> {
         ]);
     }
 
-    fn store_d_static_segment(&mut self, index: Imm) {
+    fn store_d_static_segment(&mut self, index: u16) {
         let label = self.make_static_label(index);
 
         self.stmts.extend([

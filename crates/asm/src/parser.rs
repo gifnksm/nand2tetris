@@ -1,4 +1,4 @@
-use crate::{Comp, Dest, Error, ErrorKind, Imm, InstC, Jump, Label, Statement, StatementWithLine};
+use crate::{Comp, Dest, Error, ErrorKind, InstC, Jump, Label, Statement, StatementWithLine};
 use std::io::BufRead;
 
 pub(crate) fn parse(mut reader: impl BufRead) -> Result<Vec<StatementWithLine>, Error> {
@@ -136,10 +136,7 @@ fn try_parse_a_statement(s: &str) -> Result<Option<Statement>, ErrorKind> {
             Some((Token::Number(num), "")) => {
                 let value = num
                     .parse()
-                    .map_err(|_| ErrorKind::TooLargeNumber(num.into()))
-                    .and_then(|value| {
-                        Imm::try_new(value).ok_or_else(|| ErrorKind::TooLargeNumber(num.into()))
-                    })?;
+                    .map_err(|_| ErrorKind::TooLargeNumber(num.into()))?;
                 return Ok(Some(Statement::A(value)));
             }
             _ => {}
@@ -333,11 +330,9 @@ mod tests {
             t("@  fo_:.$o  ").unwrap(),
             Some(Statement::AtLabel("fo_:.$o".into()))
         );
-        assert_eq!(
-            t("@1234").unwrap(),
-            Some(Statement::A(Imm::try_new(1234).unwrap()))
-        );
-        assert!(matches!(t("@65535"), Err(ErrorKind::TooLargeNumber(s)) if s == "65535"));
+        assert_eq!(t("@1234").unwrap(), Some(Statement::A(1234)));
+        assert_eq!(t("@65535").unwrap(), Some(Statement::A(65535)));
+        assert!(matches!(t("@65536"), Err(ErrorKind::TooLargeNumber(s)) if s == "65536"));
         assert!(matches!(t("@0x123"), Err(ErrorKind::InvalidAStatement(s)) if s == "@0x123"));
         assert!(matches!(t("@foo  bar"), Err(ErrorKind::InvalidAStatement(s)) if s == "@foo  bar"));
     }

@@ -16,9 +16,9 @@ where
 {
     let stmts = parser::parse(reader)?;
     let sym_tab = sym_tab::from_stmts(&stmts)?;
-    let insts = stmts
-        .into_iter()
-        .filter_map(|stmt| stmt.data().to_inst(&sym_tab))
-        .collect();
+    let mut insts = vec![];
+    for stmt in stmts.into_iter() {
+        stmt.data().translate(&sym_tab, &mut insts);
+    }
     Ok(insts)
 }

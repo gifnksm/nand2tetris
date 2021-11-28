@@ -14,8 +14,8 @@ pub(crate) enum Command {
     And,
     Or,
     Not,
-    Push(Segment, Imm),
-    Pop(Segment, Imm),
+    Push(Segment, u16),
+    Pop(Segment, u16),
     Label(Label),
     Goto(Label),
     IfGoto(Label),
@@ -165,7 +165,7 @@ impl FromStr for Command {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         enum Kind {
             NoArg(Command),
-            SegmentIndex(fn(Segment, Imm) -> Command),
+            SegmentIndex(fn(Segment, u16) -> Command),
             Label(fn(Label) -> Command),
             FuncNameArity(fn(FuncName, u8) -> Command),
         }
@@ -211,7 +211,6 @@ impl FromStr for Command {
                 if index >= segment_len {
                     return Err(Self::Err::TooLargeIndex(index, segment_len));
                 }
-                let index = Imm::try_new(index).unwrap(); // must be successful
 
                 f(segment, index)
             }
@@ -370,7 +369,6 @@ mod test {
 
     #[test]
     fn parse_command() {
-        let zero = Imm::try_new(0).unwrap();
         assert_eq!(Command::from_str("add").unwrap(), Command::Add);
         assert_eq!(Command::from_str("sub").unwrap(), Command::Sub);
         assert_eq!(Command::from_str("neg").unwrap(), Command::Neg);
@@ -382,63 +380,63 @@ mod test {
         assert_eq!(Command::from_str("not").unwrap(), Command::Not);
         assert_eq!(
             Command::from_str("push argument 0").unwrap(),
-            Command::Push(Segment::Argument, zero)
+            Command::Push(Segment::Argument, 0)
         );
         assert_eq!(
             Command::from_str("push local 0").unwrap(),
-            Command::Push(Segment::Local, zero)
+            Command::Push(Segment::Local, 0)
         );
         assert_eq!(
             Command::from_str("push static 0").unwrap(),
-            Command::Push(Segment::Static, zero)
+            Command::Push(Segment::Static, 0)
         );
         assert_eq!(
             Command::from_str("push constant 0").unwrap(),
-            Command::Push(Segment::Constant, zero)
+            Command::Push(Segment::Constant, 0)
         );
         assert_eq!(
             Command::from_str("push this 0").unwrap(),
-            Command::Push(Segment::This, zero)
+            Command::Push(Segment::This, 0)
         );
         assert_eq!(
             Command::from_str("push that 0").unwrap(),
-            Command::Push(Segment::That, zero)
+            Command::Push(Segment::That, 0)
         );
         assert_eq!(
             Command::from_str("push pointer 0").unwrap(),
-            Command::Push(Segment::Pointer, zero)
+            Command::Push(Segment::Pointer, 0)
         );
         assert_eq!(
             Command::from_str("push temp 0").unwrap(),
-            Command::Push(Segment::Temp, zero)
+            Command::Push(Segment::Temp, 0)
         );
         assert_eq!(
             Command::from_str("pop argument 0").unwrap(),
-            Command::Pop(Segment::Argument, zero)
+            Command::Pop(Segment::Argument, 0)
         );
         assert_eq!(
             Command::from_str("pop local 0").unwrap(),
-            Command::Pop(Segment::Local, zero)
+            Command::Pop(Segment::Local, 0)
         );
         assert_eq!(
             Command::from_str("pop static 0").unwrap(),
-            Command::Pop(Segment::Static, zero)
+            Command::Pop(Segment::Static, 0)
         );
         assert_eq!(
             Command::from_str("pop this 0").unwrap(),
-            Command::Pop(Segment::This, zero)
+            Command::Pop(Segment::This, 0)
         );
         assert_eq!(
             Command::from_str("pop that 0").unwrap(),
-            Command::Pop(Segment::That, zero)
+            Command::Pop(Segment::That, 0)
         );
         assert_eq!(
             Command::from_str("pop pointer 0").unwrap(),
-            Command::Pop(Segment::Pointer, zero)
+            Command::Pop(Segment::Pointer, 0)
         );
         assert_eq!(
             Command::from_str("pop temp 0").unwrap(),
-            Command::Pop(Segment::Temp, zero)
+            Command::Pop(Segment::Temp, 0)
         );
         assert_eq!(
             Command::from_str("label foo").unwrap(),

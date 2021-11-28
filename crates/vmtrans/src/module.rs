@@ -154,16 +154,14 @@ impl<'a> Parser<'a> {
                     .call(func_name, FuncProp::new(&self.path, line, *arity))?;
             }
             Command::Push(Segment::Local, index) | Command::Pop(Segment::Local, index)
-                if index.value() >= u16::from(self.num_locals) =>
+                if *index >= u16::from(self.num_locals) =>
             {
-                return Err(ParseCommandError::TooLargeIndex(
-                    index.value(),
-                    u16::from(self.num_locals),
+                return Err(
+                    ParseCommandError::TooLargeIndex(*index, u16::from(self.num_locals)).into(),
                 )
-                .into())
             }
             Command::Push(Segment::Argument, index) | Command::Pop(Segment::Argument, index) => {
-                self.arity = u8::max(self.arity, u8::try_from(index.value() + 1).unwrap());
+                self.arity = u8::max(self.arity, u8::try_from(index + 1).unwrap());
             }
             _ => {}
         }
