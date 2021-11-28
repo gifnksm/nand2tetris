@@ -1,6 +1,6 @@
-use crate::code_gen::CodeGen;
-use hasm::{Comp, Imm, Jump, Label, Statement};
-use std::{borrow::Borrow, num::ParseIntError, str::FromStr};
+use crate::{code_gen::CodeGen, ModuleName};
+use hasm::{Comp, Imm, Jump, Label as AsmLabel, Statement};
+use std::{borrow::Borrow, fmt, num::ParseIntError, str::FromStr};
 use thiserror::Error;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -16,11 +16,11 @@ pub(crate) enum Command {
     Not,
     Push(Segment, Imm),
     Pop(Segment, Imm),
-    Label(Ident),
-    Goto(Ident),
-    IfGoto(Ident),
-    Function(Ident, u8),
-    Call(Ident, u8),
+    Label(Label),
+    Goto(Label),
+    IfGoto(Label),
+    Function(FuncName, u8),
+    Call(FuncName, u8),
     Return,
 }
 
@@ -50,16 +50,66 @@ impl Segment {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub(crate) struct Ident(String);
+struct Ident(String);
 
-impl Borrow<str> for Ident {
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct FuncName(String);
+
+impl Borrow<str> for FuncName {
     fn borrow(&self) -> &str {
         &self.0
     }
 }
 
-impl Ident {
-    pub(crate) fn as_str(&self) -> &str {
+impl From<Ident> for FuncName {
+    fn from(s: Ident) -> Self {
+        Self(s.0)
+    }
+}
+
+impl fmt::Display for FuncName {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Display::fmt(&self.0, f)
+    }
+}
+
+impl FuncName {
+    pub(crate) fn toplevel() -> Self {
+        Self("$toplevel".to_string())
+    }
+
+    pub(crate) fn bootstrap() -> Self {
+        Self("$bootstrap".to_string())
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Label(String);
+
+impl Borrow<str> for Label {
+    fn borrow(&self) -> &str {
+        &self.0
+    }
+}
+
+impl From<Ident> for Label {
+    fn from(s: Ident) -> Self {
+        Self(s.0)
+    }
+}
+
+impl fmt::Display for Label {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Display::fmt(&self.0, f)
+    }
+}
+
+impl Label {
+    pub fn as_str(&self) -> &str {
         &self.0
     }
 }
@@ -97,8 +147,8 @@ impl FromStr for Command {
         enum Kind {
             NoArg(Command),
             SegmentIndex(fn(Segment, Imm) -> Command),
-            Ident(fn(Ident) -> Command),
-            IdentArity(fn(Ident, u8) -> Command),
+            Label(fn(Label) -> Command),
+            FuncNameArity(fn(FuncName, u8) -> Command),
         }
         let mut cs = s.split_whitespace();
         let kind_str = cs.next().ok_or(Self::Err::Empty)?;
@@ -114,11 +164,11 @@ impl FromStr for Command {
             "not" => Kind::NoArg(Self::Not),
             "push" => Kind::SegmentIndex(Self::Push),
             "pop" => Kind::SegmentIndex(Self::Pop),
-            "label" => Kind::Ident(Self::Label),
-            "goto" => Kind::Ident(Self::Goto),
-            "if-goto" => Kind::Ident(Self::IfGoto),
-            "function" => Kind::IdentArity(Self::Function),
-            "call" => Kind::IdentArity(Self::Call),
+            "label" => Kind::Label(Self::Label),
+            "goto" => Kind::Label(Self::Goto),
+            "if-goto" => Kind::Label(Self::IfGoto),
+            "function" => Kind::FuncNameArity(Self::Function),
+            "call" => Kind::FuncNameArity(Self::Call),
             "return" => Kind::NoArg(Self::Return),
             command => return Err(Self::Err::InvalidCommand(command.into())),
         };
@@ -146,16 +196,16 @@ impl FromStr for Command {
 
                 f(segment, index)
             }
-            Kind::Ident(f) => {
+            Kind::Label(f) => {
                 let label_str = cs.next().ok_or(Self::Err::TooFewArguments)?;
-                let label = Ident::from_str(label_str)?;
+                let label = Ident::from_str(label_str)?.into();
                 f(label)
             }
-            Kind::IdentArity(f) => {
+            Kind::FuncNameArity(f) => {
                 let function_str = cs.next().ok_or(Self::Err::TooFewArguments)?;
                 let arity_str = cs.next().ok_or(Self::Err::TooFewArguments)?;
 
-                let function = Ident::from_str(function_str)?;
+                let function = Ident::from_str(function_str)?.into();
                 let arity = u8::from_str(arity_str)
                     .map_err(|e| Self::Err::InvalidArity(e, arity_str.into()))?;
 
@@ -222,8 +272,8 @@ impl FromStr for Ident {
 impl Command {
     pub(crate) fn translate(
         &self,
-        module_name: &str,
-        func_name: &str,
+        module_name: &ModuleName,
+        func_name: &FuncName,
         index: usize,
     ) -> Vec<Statement> {
         let mut gen = CodeGen::new(module_name, func_name, index);
@@ -237,18 +287,22 @@ impl Command {
             Command::And => gen.binary_op(Comp::DAndA),
             Command::Or => gen.binary_op(Comp::DOrA),
             Command::Not => gen.unary_op(Comp::NotD),
-            Command::Push(Segment::Local, index) => gen.push_dynamic_segment(Label::LCL, *index),
-            Command::Push(Segment::Argument, index) => gen.push_dynamic_segment(Label::ARG, *index),
-            Command::Push(Segment::This, index) => gen.push_dynamic_segment(Label::THIS, *index),
-            Command::Push(Segment::That, index) => gen.push_dynamic_segment(Label::THAT, *index),
+            Command::Push(Segment::Local, index) => gen.push_dynamic_segment(AsmLabel::LCL, *index),
+            Command::Push(Segment::Argument, index) => {
+                gen.push_dynamic_segment(AsmLabel::ARG, *index)
+            }
+            Command::Push(Segment::This, index) => gen.push_dynamic_segment(AsmLabel::THIS, *index),
+            Command::Push(Segment::That, index) => gen.push_dynamic_segment(AsmLabel::THAT, *index),
             Command::Push(Segment::Pointer, index) => gen.push_fixed_segment(Imm::THIS, *index),
             Command::Push(Segment::Temp, index) => gen.push_fixed_segment(Imm::R5, *index),
             Command::Push(Segment::Static, index) => gen.push_static_segment(*index),
             Command::Push(Segment::Constant, imm) => gen.push_imm(*imm),
-            Command::Pop(Segment::Local, index) => gen.pop_dynamic_segment(Label::LCL, *index),
-            Command::Pop(Segment::Argument, index) => gen.pop_dynamic_segment(Label::ARG, *index),
-            Command::Pop(Segment::This, index) => gen.pop_dynamic_segment(Label::THIS, *index),
-            Command::Pop(Segment::That, index) => gen.pop_dynamic_segment(Label::THAT, *index),
+            Command::Pop(Segment::Local, index) => gen.pop_dynamic_segment(AsmLabel::LCL, *index),
+            Command::Pop(Segment::Argument, index) => {
+                gen.pop_dynamic_segment(AsmLabel::ARG, *index)
+            }
+            Command::Pop(Segment::This, index) => gen.pop_dynamic_segment(AsmLabel::THIS, *index),
+            Command::Pop(Segment::That, index) => gen.pop_dynamic_segment(AsmLabel::THAT, *index),
             Command::Pop(Segment::Pointer, index) => gen.pop_fixed_segment(Imm::THIS, *index),
             Command::Pop(Segment::Temp, index) => gen.pop_fixed_segment(Imm::R5, *index),
             Command::Pop(Segment::Static, index) => gen.pop_static_segment(*index),
@@ -369,7 +423,7 @@ mod test {
         );
         assert_eq!(
             Command::from_str("label foo").unwrap(),
-            Command::Label(Ident("foo".into()))
+            Command::Label(Label("foo".into()))
         );
 
         assert!(matches!(

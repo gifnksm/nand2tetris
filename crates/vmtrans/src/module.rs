@@ -1,7 +1,9 @@
-use crate::{Command, Error, FuncProp, FunctionTable, Ident, ParseCommandError, Segment};
+use crate::{Command, Error, FuncName, FuncProp, FunctionTable, Label, ParseCommandError, Segment};
 use hasm::Statement;
 use std::{
+    borrow::Borrow,
     collections::BTreeMap,
+    fmt,
     fs::File,
     io::{self, BufRead, BufReader},
     path::{Path, PathBuf},
@@ -11,7 +13,7 @@ use thiserror::Error;
 
 #[derive(Debug, Clone)]
 pub(crate) struct Module {
-    name: String,
+    name: ModuleName,
     path: PathBuf,
     commands: Vec<Command>,
 }
@@ -23,11 +25,8 @@ impl Module {
             .with_extension("")
             .file_name()
             .and_then(|s| s.to_str())
-            .map(|s| s.to_string())
-            .ok_or_else(|| Error::InvalidModulePath(path.clone()))?;
-        if !Self::is_valid_name(&name) {
-            return Err(Error::InvalidModuleName(name));
-        }
+            .ok_or_else(|| Error::InvalidModulePath(path.clone()))
+            .and_then(ModuleName::from_str)?;
 
         let file = File::open(&path).map_err(|e| Error::ModuleOpen(path.clone(), e))?;
         let reader = BufReader::new(file);
@@ -35,15 +34,11 @@ impl Module {
     }
 
     pub(crate) fn from_reader(
-        name: String,
+        name: ModuleName,
         path: PathBuf,
         mut reader: impl BufRead,
         functions: &mut FunctionTable,
     ) -> Result<Self, Error> {
-        if !Self::is_valid_name(&name) {
-            return Err(Error::InvalidModuleName(name));
-        }
-
         let mut parser = Parser::new(&path, functions);
         let mut line_buf = String::new();
         for line in 1.. {
@@ -68,28 +63,62 @@ impl Module {
         unreachable!()
     }
 
-    pub(crate) fn name(&self) -> &str {
+    pub(crate) fn name(&self) -> &ModuleName {
         &self.name
     }
 
     pub(crate) fn translate(&self) -> Vec<Statement> {
-        let mut func_name = "$toplevel";
+        let mut func_name = FuncName::toplevel();
         let mut stmts = vec![];
         for (index, command) in self.commands.iter().enumerate() {
             if let Command::Function(name, _) = command {
-                func_name = name.as_str();
+                func_name = name.clone();
             }
-            stmts.extend(command.translate(&self.name, func_name, index));
+            stmts.extend(command.translate(&self.name, &func_name, index));
         }
         stmts
     }
+}
 
-    fn is_valid_name(name: &str) -> bool {
-        let mut cs = name.chars();
-        cs.next()
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct ModuleName(String);
+
+impl Borrow<str> for ModuleName {
+    fn borrow(&self) -> &str {
+        &self.0
+    }
+}
+
+impl fmt::Display for ModuleName {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Display::fmt(&self.0, f)
+    }
+}
+
+impl FromStr for ModuleName {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut cs = s.chars();
+        let is_valid = cs
+            .next()
             .map(|ch| ch.is_ascii_alphabetic())
             .unwrap_or(false)
-            && cs.all(|ch| ch.is_ascii_alphanumeric() || ch == '_')
+            && cs.all(|ch| ch.is_ascii_alphanumeric() || ch == '_');
+        if !is_valid {
+            return Err(Error::InvalidModuleName(s.to_owned()));
+        }
+        Ok(Self(s.to_owned()))
+    }
+}
+
+impl ModuleName {
+    pub(crate) fn builtin() -> Self {
+        Self("$builtin".to_string())
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
     }
 }
 
@@ -97,7 +126,7 @@ impl Module {
 struct Parser<'a> {
     path: &'a Path,
     functions: &'a mut FunctionTable,
-    func_name: Option<Ident>,
+    func_name: Option<FuncName>,
     num_locals: u8,
     arity: u8,
     labels: LabelTable,
@@ -154,7 +183,7 @@ impl<'a> Parser<'a> {
         Ok(())
     }
 
-    fn start_func(&mut self, func_name: Ident, num_locals: u8) {
+    fn start_func(&mut self, func_name: FuncName, num_locals: u8) {
         self.func_name = Some(func_name);
         self.num_locals = num_locals;
         self.arity = 0;
@@ -209,16 +238,16 @@ pub enum ParseModuleErrorKind {
     #[error(transparent)]
     ParseCommand(#[from] ParseCommandError),
     #[error("label redefined: {} (first defined at line {})", _0, _1)]
-    LabelRedefinition(String, u32),
+    LabelRedefinition(Label, u32),
     #[error("label is used but not defined: {} (first used at line {})", _0, _1)]
-    LabelNotDefined(String, u32),
+    LabelNotDefined(Label, u32),
     #[error(
         "function redefined: {} (first defined at {}:{})",
         _0,
         _1.path.display(),
         _1.line
     )]
-    FunctionRedefinition(String, FuncProp),
+    FunctionRedefinition(FuncName, FuncProp),
     #[error(
         "function called with different arity: {} with arity {} (first called at {}:{} with arity {})",
         _0,
@@ -227,7 +256,7 @@ pub enum ParseModuleErrorKind {
         _2.line,
         _2.arity
     )]
-    CallerArityMismatch(String, u8, FuncProp),
+    CallerArityMismatch(FuncName, u8, FuncProp),
 }
 
 fn parse_line(s: &str) -> Result<Option<Command>, ParseModuleErrorKind> {
@@ -255,7 +284,7 @@ struct LabelState {
 
 #[derive(Debug)]
 struct LabelTable {
-    labels: BTreeMap<String, LabelState>,
+    labels: BTreeMap<Label, LabelState>,
 }
 
 impl LabelTable {
@@ -265,19 +294,19 @@ impl LabelTable {
         }
     }
 
-    fn define(&mut self, label: &Ident, line: u32) -> Result<(), ParseModuleErrorKind> {
-        let s = self.labels.entry(label.as_str().to_string()).or_default();
+    fn define(&mut self, label: &Label, line: u32) -> Result<(), ParseModuleErrorKind> {
+        let s = self.labels.entry(label.clone()).or_default();
         if let Some(defined) = s.defined.replace(line) {
             return Err(ParseModuleErrorKind::LabelRedefinition(
-                label.as_str().to_string(),
+                label.clone(),
                 defined,
             ));
         }
         Ok(())
     }
 
-    fn use_(&mut self, label: &Ident, line: u32) {
-        let s = self.labels.entry(label.as_str().to_string()).or_default();
+    fn use_(&mut self, label: &Label, line: u32) {
+        let s = self.labels.entry(label.clone()).or_default();
         if s.used.is_none() {
             s.used = Some(line);
         }
@@ -303,20 +332,20 @@ mod test {
 
     #[test]
     fn is_valid_name() {
-        assert!(Module::is_valid_name("foo"));
-        assert!(Module::is_valid_name("foo_bar"));
-        assert!(Module::is_valid_name("foo_bar_baz"));
-        assert!(Module::is_valid_name("foo123"));
-        assert!(!Module::is_valid_name(""));
-        assert!(!Module::is_valid_name("foo bar"));
-        assert!(!Module::is_valid_name("123foo"));
+        assert!(ModuleName::from_str("foo").is_ok());
+        assert!(ModuleName::from_str("foo_bar").is_ok());
+        assert!(ModuleName::from_str("foo_bar_baz").is_ok());
+        assert!(ModuleName::from_str("foo123").is_ok());
+        assert!(ModuleName::from_str("").is_err());
+        assert!(ModuleName::from_str("foo bar").is_err());
+        assert!(ModuleName::from_str("123foo").is_err());
     }
 
     #[test]
     fn parse_label() {
         fn p(input: &[&str]) -> Result<Module, Error> {
             Module::from_reader(
-                "foo".into(),
+                ModuleName::from_str("foo").unwrap(),
                 "foo.vm".into(),
                 BufReader::new(input.join("\n").into_bytes().as_slice()),
                 &mut FunctionTable::new(),
@@ -332,7 +361,7 @@ mod test {
                     kind: ParseModuleErrorKind::LabelRedefinition(l, _),
                     ..
                 }
-            ) if l == "foo"
+            ) if l.as_str() == "foo"
         ));
         assert!(matches!(
             p(&["label foo", "goto foo", "goto bar"]).unwrap_err(),
@@ -342,7 +371,7 @@ mod test {
                     kind: ParseModuleErrorKind::LabelNotDefined(l, _),
                     ..
                 }
-            ) if l == "bar"
+            ) if l.as_str() == "bar"
         ));
     }
 }

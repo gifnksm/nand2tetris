@@ -1,4 +1,4 @@
-use crate::ParseModuleError;
+use crate::{FuncName, ModuleName, ParseModuleError};
 use std::{io, path::PathBuf};
 use thiserror::Error;
 
@@ -7,7 +7,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 #[derive(Debug, Error)]
 pub enum Error {
     #[error("failed to parse module: {}", _0)]
-    ParseModule(String, #[source] ParseModuleError),
+    ParseModule(ModuleName, #[source] ParseModuleError),
     #[error("invalid module path: {}", _0.display())]
     InvalidModulePath(PathBuf),
     #[error("invalid module name: {}", _0)]
@@ -22,7 +22,7 @@ pub enum Error {
         _1.path.display(),
         _1.line
     )]
-    FunctionNotDefined(String, FuncProp),
+    FunctionNotDefined(FuncName, FuncProp),
     #[error(
         "function artiy mismatch: {} (defined at {}:{} with arity {}, called at {}:{} with arity {}",
         _0,
@@ -33,7 +33,7 @@ pub enum Error {
         _2.line,
         _2.arity
     )]
-    ArityMismatch(String, FuncProp, FuncProp),
+    ArityMismatch(FuncName, FuncProp, FuncProp),
 }
 
 #[derive(Debug, Clone)]

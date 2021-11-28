@@ -1,4 +1,6 @@
-use crate::{code_gen::CodeGen, Error, FuncProp, Ident, Module, ParseModuleErrorKind};
+use crate::{
+    code_gen::CodeGen, Error, FuncName, FuncProp, Module, ModuleName, ParseModuleErrorKind,
+};
 use hasm::Statement;
 use std::{
     collections::{BTreeMap, HashSet},
@@ -7,8 +9,8 @@ use std::{
 
 #[derive(Debug, Clone)]
 pub struct Executable {
-    modules: BTreeMap<String, Module>,
-    functions: HashSet<Ident>,
+    modules: BTreeMap<ModuleName, Module>,
+    functions: HashSet<FuncName>,
 }
 
 impl Executable {
@@ -28,15 +30,21 @@ impl Executable {
     }
 
     pub fn translate(&self) -> Vec<Statement> {
-        let mut gen = CodeGen::new("$builtin", "bootstrap", 0);
-        if let Some(entry_point) = self.functions.get("Sys.init") {
-            gen.bootstrap(entry_point);
-        }
-        let mut stmts = gen.into_statements();
+        let mut stmts = self.bootstrap();
         for module in self.modules.values() {
             stmts.extend(module.translate());
         }
         stmts
+    }
+
+    fn bootstrap(&self) -> Vec<Statement> {
+        let module_name = ModuleName::builtin();
+        let func_name = FuncName::bootstrap();
+        let mut gen = CodeGen::new(&module_name, &func_name, 0);
+        if let Some(entry_point) = self.functions.get("Sys.init") {
+            gen.bootstrap(entry_point);
+        }
+        gen.into_statements()
     }
 }
 
@@ -48,7 +56,7 @@ pub(crate) struct Function {
 
 #[derive(Debug, Clone)]
 pub(crate) struct FunctionTable {
-    functions: BTreeMap<Ident, Function>,
+    functions: BTreeMap<FuncName, Function>,
 }
 
 impl FunctionTable {
@@ -60,7 +68,7 @@ impl FunctionTable {
 
     pub(crate) fn call(
         &mut self,
-        name: &Ident,
+        name: &FuncName,
         prop: FuncProp,
     ) -> Result<(), ParseModuleErrorKind> {
         let f = self.functions.entry(name.clone()).or_default();
@@ -68,7 +76,7 @@ impl FunctionTable {
         let called = f.called.get_or_insert(prop);
         if called.arity != arity {
             return Err(ParseModuleErrorKind::CallerArityMismatch(
-                name.as_str().to_owned(),
+                name.clone(),
                 arity,
                 called.clone(),
             ));
@@ -78,31 +86,28 @@ impl FunctionTable {
 
     pub(crate) fn define(
         &mut self,
-        name: &Ident,
+        name: &FuncName,
         prop: FuncProp,
     ) -> Result<(), ParseModuleErrorKind> {
         let f = self.functions.entry(name.clone()).or_default();
         if let Some(defined) = f.defined.replace(prop) {
             return Err(ParseModuleErrorKind::FunctionRedefinition(
-                name.as_str().to_owned(),
+                name.clone(),
                 defined,
             ));
         }
         Ok(())
     }
 
-    pub(crate) fn finish(self) -> Result<HashSet<Ident>, Error> {
+    pub(crate) fn finish(self) -> Result<HashSet<FuncName>, Error> {
         let mut functions = HashSet::new();
         self.functions
             .into_iter()
             .find_map(|(name, state)| match (state.defined, state.called) {
-                (None, Some(called)) => Some(Err(Error::FunctionNotDefined(
-                    name.as_str().to_owned(),
-                    called,
-                ))),
-                (Some(defined), Some(called)) if defined.arity != called.arity => Some(Err(
-                    Error::ArityMismatch(name.as_str().to_owned(), defined, called),
-                )),
+                (None, Some(called)) => Some(Err(Error::FunctionNotDefined(name, called))),
+                (Some(defined), Some(called)) if defined.arity != called.arity => {
+                    Some(Err(Error::ArityMismatch(name, defined, called)))
+                }
                 _ => {
                     functions.insert(name);
                     None
