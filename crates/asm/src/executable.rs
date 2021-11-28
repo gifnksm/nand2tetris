@@ -2,6 +2,7 @@ pub use self::{assembler::*, parser::*};
 use crate::Statement;
 
 mod assembler;
+mod disassembler;
 mod parser;
 
 #[derive(Debug, Clone)]

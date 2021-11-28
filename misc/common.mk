@@ -14,14 +14,16 @@ TSTIGNORE=$(wildcard .tstignore)
 
 TARGET_DIR=$(GIT_CDUP)/target/nand2tetris/projects/$(GIT_PREFIX)
 TARGET_HACK=$(patsubst %.asm,$(TARGET_DIR)/%.hack,$(ASM))
+TARGET_DASM=$(patsubst %.hack,%.dasm,$(TARGET_HACK))
 TARGET_ASM=$(addprefix $(TARGET_DIR)/,$(ASM))
 TARGET_HDL=$(addprefix $(TARGET_DIR)/,$(HDL))
 TARGET_TSTIGNORE=$(addprefix $(TARGET_DIR)/,$(TSTIGNORE))
-TARGET=$(TARGET_HACK) $(TARGET_ASM) $(TARGET_HDL) $(TARGET_TSTIGNORE)
+TARGET=$(TARGET_DASM) $(TARGET_HACK) $(TARGET_ASM) $(TARGET_HDL) $(TARGET_TSTIGNORE)
 
 TARGET_TEST = $(wildcard $(TARGET_DIR)/*.tst)
 
 HASM=$(GIT_CDUP)/target/release/hasm
+HDISASM=$(GIT_CDUP)/target/release/hdisasm
 
 all: $(TARGET)
 .PHONY: all
@@ -41,6 +43,9 @@ test-asm-%: $(TARGET_DIR)/hasm/%.hack $(TARGET_DIR)/Assembler/%.hack
 
 $(TARGET_DIR)/%.hack: $(TARGET_DIR)/%.asm $(HASM)
 	$(HASM) $<
+
+%.dasm: %.hack $(HDISASM)
+	$(HDISASM) $<
 
 $(TARGET_DIR)/hasm/%.hack: $(TARGET_DIR)/hasm/%.asm
 	$(HASM) $<
@@ -71,3 +76,7 @@ $(TARGET_DIR)/.tstignore: .tstignore
 $(HASM):
 	cargo build --release --bin hasm
 .PHONY: $(HASM)
+
+$(HDISASM):
+	cargo build --release --bin hdisasm
+.PHONY: $(HDISASM)

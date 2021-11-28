@@ -13,12 +13,13 @@ GIT_PREFIX=$(patsubst %/,%,$(shell git rev-parse --show-prefix))
 TSTIGNORE=$(wildcard .tstignore)
 
 TARGET_DIR=$(GIT_CDUP)/target/nand2tetris/projects/$(GIT_PREFIX)
-TARGET=$(TARGET_DIR)/$(DIRNAME).asm $(TARGET_DIR)/$(DIRNAME).hack
+TARGET=$(TARGET_DIR)/$(DIRNAME).asm $(TARGET_DIR)/$(DIRNAME).hack $(TARGET_DIR)/$(DIRNAME).dasm
 TARGET_VM=$(wildcard $(TARGET_DIR)/*.vm)
 TARGET_TEST = $(wildcard $(TARGET_DIR)/*.tst)
 
 HASM=$(GIT_CDUP)/target/release/hasm
 VMTRANS=$(GIT_CDUP)/target/release/vmtrans
+HDISASM=$(GIT_CDUP)/target/release/hdisasm
 
 all: $(TARGET)
 .PHONY: all
@@ -39,6 +40,9 @@ $(TARGET_DIR)/$(DIRNAME).asm: $(TARGET_VM) $(VMTRANS)
 %.hack: %.asm $(HASM)
 	$(HASM) $<
 
+%.dasm: %.hack $(HDISASM)
+	$(HDISASM) $<
+
 $(VMTRANS):
 	cargo build --release --bin vmtrans
 .PHONY: $(VMTRANS)
@@ -46,3 +50,7 @@ $(VMTRANS):
 $(HASM):
 	cargo build --release --bin hasm
 .PHONY: $(HASM)
+
+$(HDISASM):
+	cargo build --release --bin hdisasm
+.PHONY: $(HDISASM)

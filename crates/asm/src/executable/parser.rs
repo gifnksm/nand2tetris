@@ -43,7 +43,7 @@ impl Executable {
             }
         }
 
-        Ok(Executable { stmts })
+        Ok(Self { stmts })
     }
 }
 

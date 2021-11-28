@@ -1,5 +1,8 @@
+pub use self::parser::*;
 use derive_try_from_primitive::TryFromPrimitive;
 use std::fmt;
+
+mod parser;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Instruction {
@@ -24,22 +27,6 @@ impl Instruction {
                 0b1110_0000_0000_0000 | (c.comp as u16) << 6 | (c.dest as u16) << 3 | c.jump as u16
             }
         }
-    }
-
-    pub fn decode(code: u16) -> Option<Self> {
-        if code & 0b1000_0000_0000_0000 != 0 {
-            return Some(Instruction::A(Imm(code)));
-        }
-        if code & 0b1110_0000_0000_0000 != 0b1110_0000_0000_0000 {
-            return None;
-        }
-        let comp = u8::try_from((code & 0b0001_1111_1100_0000) >> 6).unwrap();
-        let dest = u8::try_from((code & 0b0000_0000_0011_1000) >> 3).unwrap();
-        let jump = u8::try_from(code & 0b0000_0000_0000_0111).unwrap();
-        let comp = Comp::try_from(comp).ok()?;
-        let dest = Dest::try_from(dest).ok()?;
-        let jump = Jump::try_from(jump).ok()?;
-        Some(Instruction::C(InstC { comp, dest, jump }))
     }
 
     pub fn a(imm: Imm) -> Self {

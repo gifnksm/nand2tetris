@@ -3,6 +3,7 @@ use hack::{Comp, Dest, InstC, Jump};
 use std::{borrow::Cow, fmt, hash::Hash};
 
 mod assembler;
+mod disassembler;
 mod parser;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
