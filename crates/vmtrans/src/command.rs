@@ -294,8 +294,9 @@ impl Command {
         module_name: &ModuleName,
         func_name: &FuncName,
         index: usize,
-    ) -> Vec<Statement> {
-        let mut gen = CodeGen::new(module_name, func_name, index);
+        stmts: &mut Vec<Statement>,
+    ) {
+        let mut gen = CodeGen::new(module_name, func_name, index, stmts);
         match self {
             Command::Add => gen.binary_op(Comp::DPlusA),
             Command::Sub => gen.binary_op(Comp::AMinusD),
@@ -333,7 +334,6 @@ impl Command {
             Command::Call(name, arity) => gen.call(name, *arity),
             Command::Return => gen.return_(),
         }
-        gen.into_statements()
     }
 }
 

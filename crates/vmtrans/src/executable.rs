@@ -30,7 +30,8 @@ impl Executable {
     }
 
     pub fn translate(&self) -> Vec<Statement> {
-        let (entry_point, mut stmts) = self.bootstrap();
+        let mut stmts = Vec::new();
+        let entry_point = self.bootstrap(&mut stmts);
 
         let mut visited = BTreeSet::new();
         let mut to_visit = VecDeque::new();
@@ -52,17 +53,17 @@ impl Executable {
         for func_name in visited {
             let (module_name, commands) = self.functions.get(func_name).unwrap();
             for (index, command) in commands.iter().enumerate() {
-                stmts.extend(command.translate(module_name, func_name, index));
+                command.translate(module_name, func_name, index, &mut stmts);
             }
         }
 
         stmts
     }
 
-    fn bootstrap(&self) -> (Option<&FuncName>, Vec<Statement>) {
+    fn bootstrap(&self, stmts: &mut Vec<Statement>) -> Option<&FuncName> {
         let module_name = ModuleName::builtin();
         let func_name = FuncName::bootstrap();
-        let mut gen = CodeGen::new(&module_name, &func_name, 0);
+        let mut gen = CodeGen::new(&module_name, &func_name, 0, stmts);
         let entry_point = if let Some((entry_point, _)) =
             self.functions.get_key_value(&FuncName::entry_point())
         {
@@ -72,7 +73,7 @@ impl Executable {
             assert!(self.functions.len() <= 1);
             self.functions.keys().next()
         };
-        (entry_point, gen.into_statements())
+        entry_point
     }
 }
 

@@ -4,12 +4,12 @@ use hasm::{
     Statement::{self, self as S},
 };
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) struct CodeGen<'a> {
     module_name: &'a ModuleName,
     func_name: &'a FuncName,
     command_index: usize,
-    stmts: Vec<Statement>,
+    stmts: &'a mut Vec<Statement>,
 }
 
 impl<'a> CodeGen<'a> {
@@ -17,17 +17,14 @@ impl<'a> CodeGen<'a> {
         module_name: &'a ModuleName,
         func_name: &'a FuncName,
         command_index: usize,
+        stmts: &'a mut Vec<Statement>,
     ) -> Self {
         Self {
             module_name,
             func_name,
             command_index,
-            stmts: vec![],
+            stmts,
         }
-    }
-
-    pub(crate) fn into_statements(self) -> Vec<Statement> {
-        self.stmts
     }
 
     pub(crate) fn bootstrap(&mut self, name: &FuncName) {
