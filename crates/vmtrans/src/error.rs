@@ -17,10 +17,35 @@ pub enum Error {
     #[error("no modules found")]
     NoModules,
     #[error(
-        "function is called but not defined: {} (first called at module {} line {})",
+        "function is called but not defined: {} (called at {}:{})",
         _0,
-        _1,
-        _2
+        _1.path.display(),
+        _1.line
     )]
-    FunctionNotDefined(String, String, u32),
+    FunctionNotDefined(String, FuncProp),
+    #[error(
+        "function artiy mismatch: {} (defined at {}:{} with arity {}, called at {}:{} with arity {}",
+        _0,
+        _1.path.display(),
+        _1.line,
+        _1.arity,
+        _2.path.display(),
+        _2.line,
+        _2.arity
+    )]
+    ArityMismatch(String, FuncProp, FuncProp),
+}
+
+#[derive(Debug, Clone)]
+pub struct FuncProp {
+    pub path: PathBuf,
+    pub line: u32,
+    pub arity: u8,
+}
+
+impl FuncProp {
+    pub fn new(path: impl Into<PathBuf>, line: u32, arity: u8) -> Self {
+        let path = path.into();
+        Self { path, line, arity }
+    }
 }

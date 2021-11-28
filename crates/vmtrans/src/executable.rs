@@ -1,5 +1,5 @@
-use crate::{code_gen::CodeGen, Error, Ident, Module, ParseModuleErrorKind};
-use hasm::Statement;
+use crate::{code_gen::CodeGen, Error, FuncProp, Ident, Module, ParseModuleErrorKind};
+use hasm::{Imm, Statement};
 use std::{
     collections::{BTreeMap, HashSet},
     path::PathBuf,
@@ -42,8 +42,8 @@ impl Executable {
 
 #[derive(Debug, Clone, Default)]
 pub(crate) struct Function {
-    called: Option<(String, u32)>,
-    defined: Option<(String, u32)>,
+    called: Option<FuncProp>,
+    defined: Option<FuncProp>,
 }
 
 #[derive(Debug, Clone)]
@@ -61,12 +61,17 @@ impl FunctionTable {
     pub(crate) fn call(
         &mut self,
         name: &Ident,
-        module_name: &str,
-        line: u32,
+        prop: FuncProp,
     ) -> Result<(), ParseModuleErrorKind> {
         let f = self.functions.entry(name.clone()).or_default();
-        if f.called.is_none() {
-            f.called = Some((module_name.to_owned(), line));
+        let arity = prop.arity;
+        let called = f.called.get_or_insert(prop);
+        if called.arity != arity {
+            return Err(ParseModuleErrorKind::CallerArityMismatch(
+                name.as_str().to_owned(),
+                arity,
+                called.clone(),
+            ));
         }
         Ok(())
     }
@@ -74,18 +79,27 @@ impl FunctionTable {
     pub(crate) fn define(
         &mut self,
         name: &Ident,
-        module_name: &str,
-        line: u32,
+        prop: FuncProp,
     ) -> Result<(), ParseModuleErrorKind> {
         let f = self.functions.entry(name.clone()).or_default();
-        if let Some(defined) = f.defined.replace((module_name.into(), line)) {
+        if let Some(defined) = f.defined.replace(prop) {
             return Err(ParseModuleErrorKind::FunctionRedefinition(
                 name.as_str().to_owned(),
-                defined.0.clone(),
-                defined.1,
+                defined,
             ));
         }
         Ok(())
+    }
+
+    pub(crate) fn arg_access(&mut self, name: &Ident, index: &Imm) {
+        let prop = self
+            .functions
+            .get_mut(name)
+            .unwrap()
+            .defined
+            .as_mut()
+            .unwrap();
+        prop.arity = u8::max(prop.arity, u8::try_from(index.value()).unwrap() + 1);
     }
 
     pub(crate) fn finish(self) -> Result<HashSet<Ident>, Error> {
@@ -95,9 +109,11 @@ impl FunctionTable {
             .find_map(|(name, state)| match (state.defined, state.called) {
                 (None, Some(called)) => Some(Err(Error::FunctionNotDefined(
                     name.as_str().to_owned(),
-                    called.0,
-                    called.1,
+                    called,
                 ))),
+                (Some(defined), Some(called)) if defined.arity != called.arity => Some(Err(
+                    Error::ArityMismatch(name.as_str().to_owned(), defined, called),
+                )),
                 _ => {
                     functions.insert(name);
                     None

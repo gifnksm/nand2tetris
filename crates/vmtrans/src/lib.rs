@@ -8,4 +8,3 @@ mod command;
 mod error;
 mod executable;
 mod module;
-mod parser;

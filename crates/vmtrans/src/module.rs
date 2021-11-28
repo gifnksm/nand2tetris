@@ -1,10 +1,10 @@
-use crate::{Command, Error, FunctionTable, Ident, ParseCommandError};
+use crate::{Command, Error, FuncProp, FunctionTable, Ident, ParseCommandError, Segment};
 use hasm::Statement;
 use std::{
     collections::BTreeMap,
     fs::File,
     io::{self, BufRead, BufReader},
-    path::Path,
+    path::{Path, PathBuf},
     str::FromStr,
 };
 use thiserror::Error;
@@ -12,28 +12,31 @@ use thiserror::Error;
 #[derive(Debug, Clone)]
 pub(crate) struct Module {
     name: String,
+    path: PathBuf,
     commands: Vec<Command>,
 }
 
 impl Module {
     pub(crate) fn open(path: &Path, functions: &mut FunctionTable) -> Result<Self, Error> {
+        let path = path.to_owned();
         let name = path
             .with_extension("")
             .file_name()
             .and_then(|s| s.to_str())
             .map(|s| s.to_string())
-            .ok_or_else(|| Error::InvalidModulePath(path.into()))?;
+            .ok_or_else(|| Error::InvalidModulePath(path.clone()))?;
         if !Self::is_valid_name(&name) {
             return Err(Error::InvalidModuleName(name));
         }
 
-        let file = File::open(path).map_err(|e| Error::ModuleOpen(path.into(), e))?;
+        let file = File::open(&path).map_err(|e| Error::ModuleOpen(path.clone(), e))?;
         let reader = BufReader::new(file);
-        Self::from_reader(name, reader, functions)
+        Self::from_reader(name, path, reader, functions)
     }
 
     pub(crate) fn from_reader(
         name: String,
+        path: PathBuf,
         mut reader: impl BufRead,
         functions: &mut FunctionTable,
     ) -> Result<Self, Error> {
@@ -41,45 +44,70 @@ impl Module {
             return Err(Error::InvalidModuleName(name));
         }
 
+        let mut func_name = None;
+        let mut num_locals = u8::MAX; // workaround: consider toplevel functions as having 256 local variables
         let mut labels = LabelTable::new();
         let mut commands = vec![];
         let mut line_buf = String::new();
         for line in 1.. {
             line_buf.clear();
-            let res = reader
-                .read_line(&mut line_buf)
-                .map_err(|e| Error::ParseModule(name.clone(), ParseModuleError::new(line, e)))?;
+            let res = reader.read_line(&mut line_buf).map_err(|e| {
+                Error::ParseModule(name.clone(), ParseModuleError::new(path.clone(), line, e))
+            })?;
             if res == 0 {
                 labels.finish().map_err(|e| {
-                    Error::ParseModule(name.clone(), ParseModuleError::new(line, e))
+                    Error::ParseModule(name.clone(), ParseModuleError::new(path.clone(), line, e))
                 })?;
                 break;
             }
 
-            if let Some(command) = parse_line(&line_buf)
-                .map_err(|e| Error::ParseModule(name.clone(), ParseModuleError::new(line, e)))?
-            {
+            if let Some(command) = parse_line(&line_buf).map_err(|e| {
+                Error::ParseModule(name.clone(), ParseModuleError::new(path.clone(), line, e))
+            })? {
                 match &command {
                     Command::Label(label) => labels.define(label, line),
                     Command::Goto(label) | Command::IfGoto(label) => {
                         labels.use_(label, line);
                         Ok(())
                     }
-                    Command::Function(function_name, _arity) => labels
-                        .finish()
-                        .and_then(|()| functions.define(function_name, &name, line)),
-                    Command::Call(function_name, _arity) => {
-                        functions.call(function_name, &name, line)
+                    Command::Function(function_name, n) => labels.finish().and_then(|()| {
+                        func_name = Some(function_name.clone());
+                        num_locals = *n;
+                        functions.define(function_name, FuncProp::new(&path, line, 0))
+                    }),
+                    Command::Call(function_name, arity) => {
+                        functions.call(function_name, FuncProp::new(&path, line, *arity))
+                    }
+                    Command::Push(Segment::Local, index) | Command::Pop(Segment::Local, index)
+                        if index.value() >= u16::from(num_locals) =>
+                    {
+                        Err(
+                            ParseCommandError::TooLargeIndex(index.value(), u16::from(num_locals))
+                                .into(),
+                        )
+                    }
+                    Command::Push(Segment::Argument, index)
+                    | Command::Pop(Segment::Argument, index) => {
+                        if let Some(func_name) = &func_name {
+                            functions.arg_access(func_name, index);
+                        }
+                        Ok(())
                     }
                     _ => Ok(()),
                 }
-                .map_err(|e| Error::ParseModule(name.clone(), ParseModuleError::new(line, e)))?;
+                .map_err(|e| {
+                    Error::ParseModule(name.clone(), ParseModuleError::new(path.clone(), line, e))
+                })?;
 
                 commands.push(command);
             }
         }
 
-        Ok(Self { name, commands })
+        Ok(Self {
+            name,
+            path,
+            commands,
+        })
     }
 
     pub(crate) fn name(&self) -> &str {
@@ -108,17 +136,18 @@ impl Module {
 }
 
 #[derive(Debug, Error)]
-#[error("syntax error at line {}", line)]
+#[error("syntax error at {}:{}", path.display(), line)]
 pub struct ParseModuleError {
+    path: PathBuf,
     line: u32,
     #[source]
     kind: ParseModuleErrorKind,
 }
 
 impl ParseModuleError {
-    pub(crate) fn new(line: u32, kind: impl Into<ParseModuleErrorKind>) -> Self {
+    pub(crate) fn new(path: PathBuf, line: u32, kind: impl Into<ParseModuleErrorKind>) -> Self {
         let kind = kind.into();
-        Self { line, kind }
+        Self { path, line, kind }
     }
 
     pub fn line(&self) -> u32 {
@@ -141,12 +170,21 @@ pub enum ParseModuleErrorKind {
     #[error("label is used but not defined: {} (first used at line {})", _0, _1)]
     LabelNotDefined(String, u32),
     #[error(
-        "function redefined: {} (first defined at module {} line {}",
+        "function redefined: {} (first defined at {}:{})",
+        _0,
+        _1.path.display(),
+        _1.line
+    )]
+    FunctionRedefinition(String, FuncProp),
+    #[error(
+        "function called with different arity: {} with arity {} (first called at {}:{} with arity {})",
         _0,
         _1,
-        _2
+        _2.path.display(),
+        _2.line,
+        _2.arity
     )]
-    FunctionRedefinition(String, String, u32),
+    CallerArityMismatch(String, u8, FuncProp),
 }
 
 fn parse_line(s: &str) -> Result<Option<Command>, ParseModuleErrorKind> {
@@ -236,6 +274,7 @@ mod test {
         fn p(input: &[&str]) -> Result<Module, Error> {
             Module::from_reader(
                 "foo".into(),
+                "foo.vm".into(),
                 BufReader::new(input.join("\n").into_bytes().as_slice()),
                 &mut FunctionTable::new(),
             )

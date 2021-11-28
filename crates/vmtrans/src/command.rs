@@ -37,16 +37,14 @@ pub(crate) enum Segment {
 }
 
 impl Segment {
-    fn is_valid_index(&self, index: Imm) -> bool {
+    fn len(&self) -> u16 {
         match self {
-            Self::Argument
-            | Self::Local
-            | Self::Static
-            | Self::Constant
-            | Self::This
-            | Self::That => true,
-            Self::Pointer => index.value() < 2,
-            Self::Temp => index.value() < 8,
+            Self::Argument => u16::from(u8::MAX) + 1,
+            Self::Local | Self::Static | Self::Constant | Self::This | Self::That => {
+                Imm::MAX.value() + 1
+            }
+            Self::Pointer => 2,
+            Self::Temp => 8,
         }
     }
 }
@@ -80,8 +78,8 @@ pub enum ParseCommandError {
     InvalidSegment(#[from] ParseSegmentError),
     #[error("invalid index: {}", _1)]
     InvalidIndex(#[source] ParseIntError, String),
-    #[error("too large index: {}", _0)]
-    TooLargeIndex(u16),
+    #[error("too large index: {} (segment length: {})", _0, _1)]
+    TooLargeIndex(u16, u16),
     #[error("invalid operand: {} {}", _0, _1)]
     InvalidOperand(String, String),
     #[error(transparent)]
@@ -138,12 +136,13 @@ impl FromStr for Command {
                         segment_str.into(),
                     ));
                 }
+                let segment_len = segment.len();
                 let index = u16::from_str(index_str)
-                    .map_err(|e| Self::Err::InvalidIndex(e, index_str.into()))
-                    .and_then(|idx| Imm::try_new(idx).ok_or(Self::Err::TooLargeIndex(idx)))?;
-                if !segment.is_valid_index(index) {
-                    return Err(Self::Err::TooLargeIndex(index.value()));
+                    .map_err(|e| Self::Err::InvalidIndex(e, index_str.into()))?;
+                if index >= segment_len {
+                    return Err(Self::Err::TooLargeIndex(index, segment_len));
                 }
+                let index = Imm::try_new(index).unwrap(); // must be successful
 
                 f(segment, index)
             }
@@ -398,7 +397,7 @@ mod test {
         ));
         assert!(matches!(
             Command::from_str("push argument 65535").unwrap_err(),
-            ParseCommandError::TooLargeIndex(65535)
+            ParseCommandError::TooLargeIndex(65535, 256)
         ));
         assert!(matches!(
             Command::from_str("pop constant 0").unwrap_err(),

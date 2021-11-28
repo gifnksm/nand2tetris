@@ -61,6 +61,7 @@ impl Imm {
     pub const R15: Self = Imm(15);
     pub const SCREEN: Self = Imm(0x4000);
     pub const KBD: Self = Imm(0x6000);
+    pub const MAX: Self = Imm(0x7FFF);
 
     pub fn try_new(value: u16) -> Option<Self> {
         if value > 0x7FFF {
