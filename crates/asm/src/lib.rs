@@ -10,7 +10,7 @@ mod parser;
 mod stmt;
 mod sym_tab;
 
-pub fn parse<R>(reader: R) -> Result<Vec<Instruction>>
+pub fn parse_asm<R>(reader: R) -> Result<Vec<Instruction>>
 where
     R: BufRead,
 {

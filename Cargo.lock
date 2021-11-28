@@ -95,6 +95,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "derive-try-from-primitive"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "302ccf094df1151173bb6f5a2282fcd2f45accd5eae1bdf82dcbfefbc501ad5c"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "eyre"
 version = "0.6.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -135,6 +146,7 @@ name = "hasm"
 version = "0.1.0"
 dependencies = [
  "color-eyre",
+ "derive-try-from-primitive",
  "indexmap",
  "string-interner",
  "tempfile",

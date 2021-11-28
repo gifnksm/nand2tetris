@@ -8,6 +8,7 @@ description = "Hack assembler"
 
 [dependencies]
 color-eyre = "0.5.11"
+derive-try-from-primitive = "1.0.0"
 indexmap = "1.7.0"
 string-interner = "0.14.0"
 tempfile = "3.2.0"

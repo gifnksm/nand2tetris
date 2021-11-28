@@ -25,7 +25,7 @@ fn main() -> Result<()> {
 
     let reader = open_input_file(&input_path)
         .wrap_err_with(|| format!("failed to open input file: {}", input_path.display()))?;
-    let insts = hasm::parse(reader)
+    let insts = hasm::parse_asm(reader)
         .wrap_err_with(|| format!("failed to parse file: {}", input_path.display()))?;
     let writer = create_output_file(&output_dir).wrap_err_with(|| {
         format!(
