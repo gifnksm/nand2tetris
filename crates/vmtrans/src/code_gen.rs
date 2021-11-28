@@ -217,8 +217,8 @@ impl<'a> CodeGen<'a> {
 
     fn make_internal_label(&self, op: &str, id: &str) -> AsmLabel {
         AsmLabel::from(format!(
-            "{}:{}:{}:{}:{}",
-            self.module_name, self.func_name, self.command_index, op, id
+            "{}:{}:{}:{}",
+            self.func_name, self.command_index, op, id
         ))
     }
 
@@ -227,7 +227,7 @@ impl<'a> CodeGen<'a> {
     }
 
     fn make_label(&self, label: &Label) -> AsmLabel {
-        AsmLabel::from(format!("{}.{}.{}", self.module_name, self.func_name, label))
+        AsmLabel::from(format!("{}.{}", self.func_name, label))
     }
 
     fn make_function_label(&self, name: &FuncName) -> AsmLabel {

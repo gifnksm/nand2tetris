@@ -1,5 +1,4 @@
 use crate::{Command, Error, FuncName, FuncProp, FunctionTable, Label, ParseCommandError, Segment};
-use hasm::Statement;
 use std::{
     borrow::Borrow,
     collections::BTreeMap,
@@ -39,7 +38,7 @@ impl Module {
         mut reader: impl BufRead,
         functions: &mut FunctionTable,
     ) -> Result<Self, Error> {
-        let mut parser = Parser::new(&path, functions);
+        let mut parser = Parser::new(&path, &name, functions);
         let mut line_buf = String::new();
         for line in 1.. {
             line_buf.clear();
@@ -65,18 +64,6 @@ impl Module {
 
     pub(crate) fn name(&self) -> &ModuleName {
         &self.name
-    }
-
-    pub(crate) fn translate(&self) -> Vec<Statement> {
-        let mut func_name = FuncName::toplevel();
-        let mut stmts = vec![];
-        for (index, command) in self.commands.iter().enumerate() {
-            if let Command::Function(name, _) = command {
-                func_name = name.clone();
-            }
-            stmts.extend(command.translate(&self.name, &func_name, index));
-        }
-        stmts
     }
 }
 
@@ -125,8 +112,9 @@ impl ModuleName {
 #[derive(Debug)]
 struct Parser<'a> {
     path: &'a Path,
+    module_name: &'a ModuleName,
     functions: &'a mut FunctionTable,
-    func_name: Option<FuncName>,
+    func_name: FuncName,
     num_locals: u8,
     arity: u8,
     labels: LabelTable,
@@ -134,11 +122,12 @@ struct Parser<'a> {
 }
 
 impl<'a> Parser<'a> {
-    fn new(path: &'a Path, functions: &'a mut FunctionTable) -> Self {
+    fn new(path: &'a Path, module_name: &'a ModuleName, functions: &'a mut FunctionTable) -> Self {
         Self {
             path,
+            module_name,
             functions,
-            func_name: None,
+            func_name: FuncName::toplevel(),
             num_locals: u8::MAX, // workaround: consider toplevel functions as having 256 local variables
             arity: 0,
             labels: LabelTable::new(),
@@ -184,20 +173,19 @@ impl<'a> Parser<'a> {
     }
 
     fn start_func(&mut self, func_name: FuncName, num_locals: u8) {
-        self.func_name = Some(func_name);
+        self.func_name = func_name;
         self.num_locals = num_locals;
         self.arity = 0;
     }
 
     fn finish_func(&mut self, line: u32) -> Result<(), ParseModuleErrorKind> {
         self.labels.finish()?;
-        if let Some(func_name) = &self.func_name {
+        if !self.commands.is_empty() {
+            let prop = FuncProp::new(&self.path, line, self.arity);
+            let body = self.commands.drain(..).collect();
             self.functions
-                .define(func_name, FuncProp::new(&self.path, line, self.arity))?;
+                .define(self.module_name, &self.func_name, prop, body)?;
         }
-        self.func_name = None;
-        self.num_locals = u8::MAX;
-        self.arity = 0;
         Ok(())
     }
 

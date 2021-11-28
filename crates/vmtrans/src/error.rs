@@ -34,6 +34,8 @@ pub enum Error {
         _2.arity
     )]
     ArityMismatch(FuncName, FuncProp, FuncProp),
+    #[error("multiple function found, but there is not entry point")]
+    NoEntryPoint,
 }
 
 #[derive(Debug, Clone)]

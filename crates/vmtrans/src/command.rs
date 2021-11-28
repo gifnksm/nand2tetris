@@ -82,6 +82,10 @@ impl FuncName {
         Self("$bootstrap".to_string())
     }
 
+    pub(crate) fn entry_point() -> Self {
+        Self("Sys.init".to_string())
+    }
+
     pub fn as_str(&self) -> &str {
         &self.0
     }
