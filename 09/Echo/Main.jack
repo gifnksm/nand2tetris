@@ -1,0 +1,12 @@
+/** Echo program. */
+class Main {
+    function void main() {
+        var String input;
+        while (true) {
+            let input = Keyboard.readLine(">");
+            do Output.printString(input);
+            do Output.println();
+        }
+        return;
+    }
+}
