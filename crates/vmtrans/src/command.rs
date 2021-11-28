@@ -51,7 +51,7 @@ impl Segment {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) struct Ident(String);
 
 impl Borrow<str> for Ident {

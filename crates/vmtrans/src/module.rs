@@ -1,7 +1,7 @@
 use crate::{Command, Error, FunctionTable, Ident, ParseCommandError};
 use hasm::Statement;
 use std::{
-    collections::HashMap,
+    collections::BTreeMap,
     fs::File,
     io::{self, BufRead, BufReader},
     path::Path,
@@ -174,13 +174,13 @@ struct LabelState {
 
 #[derive(Debug)]
 struct LabelTable {
-    labels: HashMap<String, LabelState>,
+    labels: BTreeMap<String, LabelState>,
 }
 
 impl LabelTable {
     fn new() -> Self {
         Self {
-            labels: HashMap::new(),
+            labels: BTreeMap::new(),
         }
     }
 
@@ -203,16 +203,15 @@ impl LabelTable {
     }
 
     fn finish(&mut self) -> Result<(), ParseModuleErrorKind> {
-        self.labels
-            .drain()
-            .filter_map(|(label, state)| match (state.defined, state.used) {
-                (None, Some(used_line)) => {
-                    Some(Err(ParseModuleErrorKind::LabelNotDefined(label, used_line)))
-                }
-                _ => None,
-            })
-            .next()
-            .unwrap_or(Ok(()))?;
+        for (label, state) in &self.labels {
+            if let (None, Some(used_line)) = (state.defined, state.used) {
+                return Err(ParseModuleErrorKind::LabelNotDefined(
+                    label.clone(),
+                    used_line,
+                ));
+            }
+        }
+        self.labels.clear();
         Ok(())
     }
 }

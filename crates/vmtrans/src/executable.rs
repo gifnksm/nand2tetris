@@ -1,13 +1,13 @@
 use crate::{code_gen::CodeGen, Error, Ident, Module, ParseModuleErrorKind};
 use hasm::Statement;
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeMap, HashSet},
     path::PathBuf,
 };
 
 #[derive(Debug, Clone)]
 pub struct Executable {
-    modules: HashMap<String, Module>,
+    modules: BTreeMap<String, Module>,
     functions: HashSet<Ident>,
 }
 
@@ -19,7 +19,7 @@ impl Executable {
             .map(|path| {
                 Module::open(path, &mut functions).map(|module| (module.name().to_owned(), module))
             })
-            .collect::<Result<HashMap<_, _>, _>>()?;
+            .collect::<Result<BTreeMap<_, _>, _>>()?;
         if modules.is_empty() {
             return Err(Error::NoModules);
         }
@@ -48,13 +48,13 @@ pub(crate) struct Function {
 
 #[derive(Debug, Clone)]
 pub(crate) struct FunctionTable {
-    functions: HashMap<Ident, Function>,
+    functions: BTreeMap<Ident, Function>,
 }
 
 impl FunctionTable {
     pub(crate) fn new() -> Self {
         Self {
-            functions: HashMap::new(),
+            functions: BTreeMap::new(),
         }
     }
 
