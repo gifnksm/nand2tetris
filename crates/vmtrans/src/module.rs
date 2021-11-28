@@ -44,10 +44,7 @@ impl Module {
             return Err(Error::InvalidModuleName(name));
         }
 
-        let mut func_name = None;
-        let mut num_locals = u8::MAX; // workaround: consider toplevel functions as having 256 local variables
-        let mut labels = LabelTable::new();
-        let mut commands = vec![];
+        let mut parser = Parser::new(&path, functions);
         let mut line_buf = String::new();
         for line in 1.. {
             line_buf.clear();
@@ -55,59 +52,20 @@ impl Module {
                 Error::ParseModule(name.clone(), ParseModuleError::new(path.clone(), line, e))
             })?;
             if res == 0 {
-                labels.finish().map_err(|e| {
+                let commands = parser.finish(line).map_err(|e| {
                     Error::ParseModule(name.clone(), ParseModuleError::new(path.clone(), line, e))
                 })?;
-                break;
+                return Ok(Self {
+                    name,
+                    path,
+                    commands,
+                });
             }
-
-            if let Some(command) = parse_line(&line_buf).map_err(|e| {
+            parser.parse_line(&line_buf, line).map_err(|e| {
                 Error::ParseModule(name.clone(), ParseModuleError::new(path.clone(), line, e))
-            })? {
-                match &command {
-                    Command::Label(label) => labels.define(label, line),
-                    Command::Goto(label) | Command::IfGoto(label) => {
-                        labels.use_(label, line);
-                        Ok(())
-                    }
-                    Command::Function(function_name, n) => labels.finish().and_then(|()| {
-                        func_name = Some(function_name.clone());
-                        num_locals = *n;
-                        functions.define(function_name, FuncProp::new(&path, line, 0))
-                    }),
-                    Command::Call(function_name, arity) => {
-                        functions.call(function_name, FuncProp::new(&path, line, *arity))
-                    }
-                    Command::Push(Segment::Local, index) | Command::Pop(Segment::Local, index)
-                        if index.value() >= u16::from(num_locals) =>
-                    {
-                        Err(
-                            ParseCommandError::TooLargeIndex(index.value(), u16::from(num_locals))
-                                .into(),
-                        )
-                    }
-                    Command::Push(Segment::Argument, index)
-                    | Command::Pop(Segment::Argument, index) => {
-                        if let Some(func_name) = &func_name {
-                            functions.arg_access(func_name, index);
-                        }
-                        Ok(())
-                    }
-                    _ => Ok(()),
-                }
-                .map_err(|e| {
-                    Error::ParseModule(name.clone(), ParseModuleError::new(path.clone(), line, e))
-                })?;
-
-                commands.push(command);
-            }
+            })?;
         }
-
-        Ok(Self {
-            name,
-            path,
-            commands,
-        })
+        unreachable!()
     }
 
     pub(crate) fn name(&self) -> &str {
@@ -132,6 +90,91 @@ impl Module {
             .map(|ch| ch.is_ascii_alphabetic())
             .unwrap_or(false)
             && cs.all(|ch| ch.is_ascii_alphanumeric() || ch == '_')
+    }
+}
+
+#[derive(Debug)]
+struct Parser<'a> {
+    path: &'a Path,
+    functions: &'a mut FunctionTable,
+    func_name: Option<Ident>,
+    num_locals: u8,
+    arity: u8,
+    labels: LabelTable,
+    commands: Vec<Command>,
+}
+
+impl<'a> Parser<'a> {
+    fn new(path: &'a Path, functions: &'a mut FunctionTable) -> Self {
+        Self {
+            path,
+            functions,
+            func_name: None,
+            num_locals: u8::MAX, // workaround: consider toplevel functions as having 256 local variables
+            arity: 0,
+            labels: LabelTable::new(),
+            commands: vec![],
+        }
+    }
+
+    fn parse_line(&mut self, s: &str, line: u32) -> Result<(), ParseModuleErrorKind> {
+        let command = if let Some(command) = parse_line(s)? {
+            command
+        } else {
+            return Ok(());
+        };
+
+        match &command {
+            Command::Label(label) => self.labels.define(label, line)?,
+            Command::Goto(label) | Command::IfGoto(label) => self.labels.use_(label, line),
+            Command::Function(func_name, num_locals) => {
+                self.finish_func(line)?;
+                self.start_func(func_name.clone(), *num_locals);
+            }
+            Command::Call(func_name, arity) => {
+                self.functions
+                    .call(func_name, FuncProp::new(&self.path, line, *arity))?;
+            }
+            Command::Push(Segment::Local, index) | Command::Pop(Segment::Local, index)
+                if index.value() >= u16::from(self.num_locals) =>
+            {
+                return Err(ParseCommandError::TooLargeIndex(
+                    index.value(),
+                    u16::from(self.num_locals),
+                )
+                .into())
+            }
+            Command::Push(Segment::Argument, index) | Command::Pop(Segment::Argument, index) => {
+                self.arity = u8::max(self.arity, u8::try_from(index.value() + 1).unwrap());
+            }
+            _ => {}
+        }
+        self.commands.push(command);
+
+        Ok(())
+    }
+
+    fn start_func(&mut self, func_name: Ident, num_locals: u8) {
+        self.func_name = Some(func_name);
+        self.num_locals = num_locals;
+        self.arity = 0;
+    }
+
+    fn finish_func(&mut self, line: u32) -> Result<(), ParseModuleErrorKind> {
+        self.labels.finish()?;
+        if let Some(func_name) = &self.func_name {
+            self.functions
+                .define(func_name, FuncProp::new(&self.path, line, self.arity))?;
+        }
+        self.func_name = None;
+        self.num_locals = u8::MAX;
+        self.arity = 0;
+        Ok(())
+    }
+
+    fn finish(mut self, line: u32) -> Result<Vec<Command>, ParseModuleErrorKind> {
+        self.finish_func(line)?;
+        Ok(self.commands)
     }
 }
 

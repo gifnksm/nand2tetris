@@ -1,5 +1,5 @@
 use crate::{code_gen::CodeGen, Error, FuncProp, Ident, Module, ParseModuleErrorKind};
-use hasm::{Imm, Statement};
+use hasm::Statement;
 use std::{
     collections::{BTreeMap, HashSet},
     path::PathBuf,
@@ -89,17 +89,6 @@ impl FunctionTable {
             ));
         }
         Ok(())
-    }
-
-    pub(crate) fn arg_access(&mut self, name: &Ident, index: &Imm) {
-        let prop = self
-            .functions
-            .get_mut(name)
-            .unwrap()
-            .defined
-            .as_mut()
-            .unwrap();
-        prop.arity = u8::max(prop.arity, u8::try_from(index.value()).unwrap() + 1);
     }
 
     pub(crate) fn finish(self) -> Result<HashSet<Ident>, Error> {
