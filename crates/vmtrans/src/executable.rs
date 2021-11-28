@@ -2,7 +2,10 @@ use crate::{
     code_gen::CodeGen, Command, Error, FuncName, FuncProp, Module, ModuleName, ParseModuleErrorKind,
 };
 use hasm::Statement;
-use std::{collections::BTreeMap, path::PathBuf};
+use std::{
+    collections::{BTreeMap, BTreeSet, VecDeque},
+    path::PathBuf,
+};
 
 #[derive(Debug, Clone)]
 pub struct Executable {
@@ -27,35 +30,61 @@ impl Executable {
     }
 
     pub fn translate(&self) -> Vec<Statement> {
-        let mut stmts = self.bootstrap();
-        for (func_name, (module_name, commands)) in &self.functions {
+        let (entry_point, mut stmts) = self.bootstrap();
+
+        let mut visited = BTreeSet::new();
+        let mut to_visit = VecDeque::new();
+        if let Some(entry_point) = entry_point {
+            to_visit.push_front(entry_point);
+        }
+        while let Some(func_name) = to_visit.pop_front() {
+            visited.insert(func_name);
+            let (_, commands) = self.functions.get(func_name).unwrap();
+            for command in commands {
+                if let Command::Call(callee, _) = command {
+                    if !visited.contains(callee) {
+                        to_visit.push_back(callee);
+                    }
+                }
+            }
+        }
+
+        for func_name in visited {
+            let (module_name, commands) = self.functions.get(func_name).unwrap();
             for (index, command) in commands.iter().enumerate() {
                 stmts.extend(command.translate(module_name, func_name, index));
             }
         }
+
         stmts
     }
 
-    fn bootstrap(&self) -> Vec<Statement> {
+    fn bootstrap(&self) -> (Option<&FuncName>, Vec<Statement>) {
         let module_name = ModuleName::builtin();
         let func_name = FuncName::bootstrap();
         let mut gen = CodeGen::new(&module_name, &func_name, 0);
-        if let Some((entry_point, _)) = self.functions.get_key_value(&FuncName::entry_point()) {
+        let entry_point = if let Some((entry_point, _)) =
+            self.functions.get_key_value(&FuncName::entry_point())
+        {
             gen.bootstrap(entry_point);
-        }
-        gen.into_statements()
+            Some(entry_point)
+        } else {
+            assert!(self.functions.len() <= 1);
+            self.functions.keys().next()
+        };
+        (entry_point, gen.into_statements())
     }
 }
 
 #[derive(Debug, Clone, Default)]
-pub(crate) struct Function {
+struct FunctionState {
     called: Option<FuncProp>,
     defined: Option<(FuncProp, ModuleName, Vec<Command>)>,
 }
 
 #[derive(Debug, Clone)]
 pub(crate) struct FunctionTable {
-    functions: BTreeMap<FuncName, Function>,
+    functions: BTreeMap<FuncName, FunctionState>,
 }
 
 impl FunctionTable {
