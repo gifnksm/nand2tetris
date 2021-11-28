@@ -180,7 +180,12 @@ impl<'a> Parser<'a> {
 
     fn finish_func(&mut self, line: u32) -> Result<(), ParseModuleErrorKind> {
         self.labels.finish()?;
-        if !self.commands.is_empty() {
+        if let Some(last) = self.commands.last() {
+            if !self.func_name.is_toplevel() && !last.is_jump() {
+                return Err(ParseModuleErrorKind::NoJumpCommandAtEndOfFunction(
+                    self.func_name.clone(),
+                ));
+            }
             let prop = FuncProp::new(&self.path, line, self.arity);
             let body = self.commands.drain(..).collect();
             self.functions
@@ -245,6 +250,8 @@ pub enum ParseModuleErrorKind {
         _2.arity
     )]
     CallerArityMismatch(FuncName, u8, FuncProp),
+    #[error("no jump command at end of function: {}", _0)]
+    NoJumpCommandAtEndOfFunction(FuncName),
 }
 
 fn parse_line(s: &str) -> Result<Option<Command>, ParseModuleErrorKind> {

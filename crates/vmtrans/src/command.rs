@@ -24,6 +24,15 @@ pub(crate) enum Command {
     Return,
 }
 
+impl Command {
+    pub(crate) fn is_jump(&self) -> bool {
+        matches!(
+            self,
+            Command::Goto(..) | Command::IfGoto(..) | Command::Call(..) | Command::Return
+        )
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Segment {
     Argument,
@@ -74,8 +83,14 @@ impl fmt::Display for FuncName {
 }
 
 impl FuncName {
+    const TOPLEVEL: &'static str = "$toplevel";
+
     pub(crate) fn toplevel() -> Self {
-        Self("$toplevel".to_string())
+        Self(Self::TOPLEVEL.to_string())
+    }
+
+    pub(crate) fn is_toplevel(&self) -> bool {
+        self.0 == Self::TOPLEVEL
     }
 
     pub(crate) fn bootstrap() -> Self {
