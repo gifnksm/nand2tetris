@@ -1,20 +1,12 @@
-use crate::{
-    code_gen::CodeGen, Command, Error, FuncName, FuncProp, Module, ModuleName, ParseModuleErrorKind,
-};
-use hasm::Statement;
-use std::{
-    collections::{BTreeMap, BTreeSet, VecDeque},
-    path::PathBuf,
-};
-
-#[derive(Debug, Clone)]
-pub struct Executable {
-    modules: BTreeMap<ModuleName, Module>,
-    functions: BTreeMap<FuncName, (ModuleName, Vec<Command>)>,
-}
+use super::Executable;
+use crate::ParseModuleError;
+use crate::{Command, FuncName, Module, ModuleName, ParseModuleErrorKind};
+use std::io;
+use std::{collections::BTreeMap, path::PathBuf};
+use thiserror::Error;
 
 impl Executable {
-    pub fn open(module_paths: &[PathBuf]) -> Result<Self, Error> {
+    pub fn open(module_paths: &[PathBuf]) -> Result<Self, ParseExecutableError> {
         let mut functions = FunctionTable::new();
         let modules = module_paths
             .iter()
@@ -23,57 +15,58 @@ impl Executable {
             })
             .collect::<Result<BTreeMap<_, _>, _>>()?;
         if modules.is_empty() {
-            return Err(Error::NoModules);
+            return Err(ParseExecutableError::NoModules);
         }
         let functions = functions.finish()?;
         Ok(Self { modules, functions })
     }
+}
 
-    pub fn translate(&self) -> Vec<Statement> {
-        let mut stmts = Vec::new();
-        let entry_point = self.bootstrap(&mut stmts);
+#[derive(Debug, Error)]
+pub enum ParseExecutableError {
+    #[error("failed to parse module: {}", _0)]
+    ParseModule(ModuleName, #[source] ParseModuleError),
+    #[error("invalid module path: {}", _0.display())]
+    InvalidModulePath(PathBuf),
+    #[error("invalid module name: {}", _0)]
+    InvalidModuleName(String),
+    #[error("failed to open module file: {}", _0.display())]
+    ModuleOpen(PathBuf, #[source] io::Error),
+    #[error("no modules found")]
+    NoModules,
+    #[error(
+        "function is called but not defined: {} (called at {}:{})",
+        _0,
+        _1.path.display(),
+        _1.line
+    )]
+    FunctionNotDefined(FuncName, FuncProp),
+    #[error(
+        "function artiy mismatch: {} (defined at {}:{} with arity {}, called at {}:{} with arity {}",
+        _0,
+        _1.path.display(),
+        _1.line,
+        _1.arity,
+        _2.path.display(),
+        _2.line,
+        _2.arity
+    )]
+    ArityMismatch(FuncName, FuncProp, FuncProp),
+    #[error("multiple function found, but there is not entry point")]
+    NoEntryPoint,
+}
 
-        let mut visited = BTreeSet::new();
-        let mut to_visit = VecDeque::new();
-        if let Some(entry_point) = entry_point {
-            to_visit.push_front(entry_point);
-        }
-        while let Some(func_name) = to_visit.pop_front() {
-            visited.insert(func_name);
-            let (_, commands) = self.functions.get(func_name).unwrap();
-            for command in commands {
-                if let Command::Call(callee, _) = command {
-                    if !visited.contains(callee) {
-                        to_visit.push_back(callee);
-                    }
-                }
-            }
-        }
+#[derive(Debug, Clone)]
+pub struct FuncProp {
+    pub path: PathBuf,
+    pub line: u32,
+    pub arity: u8,
+}
 
-        for func_name in visited {
-            let (module_name, commands) = self.functions.get(func_name).unwrap();
-            for (index, command) in commands.iter().enumerate() {
-                command.translate(module_name, func_name, index, &mut stmts);
-            }
-        }
-
-        stmts
-    }
-
-    fn bootstrap(&self, stmts: &mut Vec<Statement>) -> Option<&FuncName> {
-        let module_name = ModuleName::builtin();
-        let func_name = FuncName::bootstrap();
-        let mut gen = CodeGen::new(&module_name, &func_name, 0, stmts);
-        let entry_point = if let Some((entry_point, _)) =
-            self.functions.get_key_value(&FuncName::entry_point())
-        {
-            gen.bootstrap(entry_point);
-            Some(entry_point)
-        } else {
-            assert!(self.functions.len() <= 1);
-            self.functions.keys().next()
-        };
-        entry_point
+impl FuncProp {
+    pub fn new(path: impl Into<PathBuf>, line: u32, arity: u8) -> Self {
+        let path = path.into();
+        Self { path, line, arity }
     }
 }
 
@@ -130,14 +123,20 @@ impl FunctionTable {
         Ok(())
     }
 
-    pub(crate) fn finish(self) -> Result<BTreeMap<FuncName, (ModuleName, Vec<Command>)>, Error> {
+    pub(crate) fn finish(
+        self,
+    ) -> Result<BTreeMap<FuncName, (ModuleName, Vec<Command>)>, ParseExecutableError> {
         let mut functions = BTreeMap::new();
         self.functions
             .into_iter()
             .find_map(|(func_name, state)| match (state.defined, state.called) {
-                (None, Some(called)) => Some(Err(Error::FunctionNotDefined(func_name, called))),
+                (None, Some(called)) => Some(Err(ParseExecutableError::FunctionNotDefined(
+                    func_name, called,
+                ))),
                 (Some((defined, _, _)), Some(called)) if defined.arity != called.arity => {
-                    Some(Err(Error::ArityMismatch(func_name, defined, called)))
+                    Some(Err(ParseExecutableError::ArityMismatch(
+                        func_name, defined, called,
+                    )))
                 }
                 (Some((_, module_name, body)), _) => {
                     functions.insert(func_name, (module_name, body));
@@ -148,7 +147,7 @@ impl FunctionTable {
             .unwrap_or(Ok(()))?;
 
         if !functions.contains_key(&FuncName::entry_point()) && functions.len() > 1 {
-            return Err(Error::NoEntryPoint);
+            return Err(ParseExecutableError::NoEntryPoint);
         }
         Ok(functions)
     }

@@ -7,9 +7,7 @@ description = "Hack assembler"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+asm = { path = "../asm" }
 color-eyre = "0.5.11"
-derive-try-from-primitive = "1.0.0"
-indexmap = "1.7.0"
-string-interner = "0.14.0"
+hack = { path = "../hack" }
 tempfile = "3.2.0"
-thiserror = "1.0.30"

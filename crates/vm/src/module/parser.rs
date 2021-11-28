@@ -1,53 +1,39 @@
-use crate::{Command, Error, FuncName, FuncProp, FunctionTable, Label, ParseCommandError, Segment};
+use super::{Module, ModuleName};
+use crate::{
+    Command, FuncName, FuncProp, FunctionTable, Label, ParseCommandError, ParseExecutableError,
+    Segment,
+};
 use std::{
-    borrow::Borrow,
     collections::BTreeMap,
-    fmt,
-    fs::File,
-    io::{self, BufRead, BufReader},
+    io::{self, BufRead},
     path::{Path, PathBuf},
     str::FromStr,
 };
 use thiserror::Error;
 
-#[derive(Debug, Clone)]
-pub(crate) struct Module {
-    name: ModuleName,
-    path: PathBuf,
-    commands: Vec<Command>,
-}
-
 impl Module {
-    pub(crate) fn open(path: &Path, functions: &mut FunctionTable) -> Result<Self, Error> {
-        let path = path.to_owned();
-        let name = path
-            .with_extension("")
-            .file_name()
-            .and_then(|s| s.to_str())
-            .ok_or_else(|| Error::InvalidModulePath(path.clone()))
-            .and_then(ModuleName::from_str)?;
-
-        let file = File::open(&path).map_err(|e| Error::ModuleOpen(path.clone(), e))?;
-        let reader = BufReader::new(file);
-        Self::from_reader(name, path, reader, functions)
-    }
-
     pub(crate) fn from_reader(
         name: ModuleName,
         path: PathBuf,
         mut reader: impl BufRead,
         functions: &mut FunctionTable,
-    ) -> Result<Self, Error> {
+    ) -> Result<Self, ParseExecutableError> {
         let mut parser = Parser::new(&path, &name, functions);
         let mut line_buf = String::new();
         for line in 1.. {
             line_buf.clear();
             let res = reader.read_line(&mut line_buf).map_err(|e| {
-                Error::ParseModule(name.clone(), ParseModuleError::new(path.clone(), line, e))
+                ParseExecutableError::ParseModule(
+                    name.clone(),
+                    ParseModuleError::new(path.clone(), line, e),
+                )
             })?;
             if res == 0 {
                 let commands = parser.finish(line).map_err(|e| {
-                    Error::ParseModule(name.clone(), ParseModuleError::new(path.clone(), line, e))
+                    ParseExecutableError::ParseModule(
+                        name.clone(),
+                        ParseModuleError::new(path.clone(), line, e),
+                    )
                 })?;
                 return Ok(Self {
                     name,
@@ -56,34 +42,18 @@ impl Module {
                 });
             }
             parser.parse_line(&line_buf, line).map_err(|e| {
-                Error::ParseModule(name.clone(), ParseModuleError::new(path.clone(), line, e))
+                ParseExecutableError::ParseModule(
+                    name.clone(),
+                    ParseModuleError::new(path.clone(), line, e),
+                )
             })?;
         }
         unreachable!()
     }
-
-    pub(crate) fn name(&self) -> &ModuleName {
-        &self.name
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct ModuleName(String);
-
-impl Borrow<str> for ModuleName {
-    fn borrow(&self) -> &str {
-        &self.0
-    }
-}
-
-impl fmt::Display for ModuleName {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        fmt::Display::fmt(&self.0, f)
-    }
 }
 
 impl FromStr for ModuleName {
-    type Err = Error;
+    type Err = ParseExecutableError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let mut cs = s.chars();
@@ -93,19 +63,9 @@ impl FromStr for ModuleName {
             .unwrap_or(false)
             && cs.all(|ch| ch.is_ascii_alphanumeric() || ch == '_');
         if !is_valid {
-            return Err(Error::InvalidModuleName(s.to_owned()));
+            return Err(ParseExecutableError::InvalidModuleName(s.to_owned()));
         }
         Ok(Self(s.to_owned()))
-    }
-}
-
-impl ModuleName {
-    pub(crate) fn builtin() -> Self {
-        Self("$builtin".to_string())
-    }
-
-    pub fn as_str(&self) -> &str {
-        &self.0
     }
 }
 
@@ -322,6 +282,7 @@ impl LabelTable {
 #[cfg(test)]
 mod test {
     use super::*;
+    use std::io::BufReader;
 
     #[test]
     fn is_valid_name() {
@@ -336,7 +297,7 @@ mod test {
 
     #[test]
     fn parse_label() {
-        fn p(input: &[&str]) -> Result<Module, Error> {
+        fn p(input: &[&str]) -> Result<Module, ParseExecutableError> {
             Module::from_reader(
                 ModuleName::from_str("foo").unwrap(),
                 "foo.vm".into(),
@@ -348,7 +309,7 @@ mod test {
         assert!(p(&["label foo", "label bar", "goto foo", "if-goto bar"]).is_ok());
         assert!(matches!(
             p(&["label foo", "label bar", "label foo"]).unwrap_err(),
-            Error::ParseModule(
+            ParseExecutableError::ParseModule(
                 _,
                 ParseModuleError {
                     kind: ParseModuleErrorKind::LabelRedefinition(l, _),
@@ -358,7 +319,7 @@ mod test {
         ));
         assert!(matches!(
             p(&["label foo", "goto foo", "goto bar"]).unwrap_err(),
-            Error::ParseModule(
+            ParseExecutableError::ParseModule(
                 _,
                 ParseModuleError {
                     kind: ParseModuleErrorKind::LabelNotDefined(l, _),

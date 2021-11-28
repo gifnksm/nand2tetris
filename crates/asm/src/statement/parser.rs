@@ -1,42 +1,46 @@
-use crate::{Comp, Dest, Error, ErrorKind, InstC, Jump, Label, Statement, StatementWithLine};
-use std::io::BufRead;
+use super::{Label, Statement};
+pub use hack::{Comp, Dest, InstC, Jump};
+use std::str::FromStr;
+use thiserror::Error;
 
-pub(crate) fn parse(mut reader: impl BufRead) -> Result<Vec<StatementWithLine>, Error> {
-    let mut stmts = vec![];
-    let mut line_buf = String::new();
-    for line in 1.. {
-        line_buf.clear();
-        let res = reader
-            .read_line(&mut line_buf)
-            .map_err(|e| Error::new(line, e))?;
-        if res == 0 {
-            break;
-        }
-
-        if let Some(stmt) = parse_line(&line_buf).map_err(|e| Error::new(line, e))? {
-            stmts.push(StatementWithLine::new(line, stmt));
-        }
-    }
-
-    Ok(stmts)
+#[derive(Debug, Error)]
+pub enum ParseStatementError {
+    #[error("cannot parse statement from empty string")]
+    Empty,
+    #[error("too large number: {}", _0)]
+    TooLargeNumber(String),
+    #[error("invalid label statement: {}", _0)]
+    InvalidLabelStatement(String),
+    #[error("invalid A statement: {}", _0)]
+    InvalidAStatement(String),
+    #[error("invalid C statement: invalid dest: {}", _0)]
+    InvalidCStatementDest(String),
+    #[error("invalid C statement: invalid comp: {}", _0)]
+    InvalidCStatementComp(String),
+    #[error("invalid C statement: invalid jump: {}", _0)]
+    InvalidCStatementJump(String),
 }
 
-fn parse_line(line: &str) -> Result<Option<Statement>, ErrorKind> {
-    let line = trim_spaces_or_comment(line);
-    if line.is_empty() {
-        return Ok(None);
-    }
+impl FromStr for Statement {
+    type Err = ParseStatementError;
 
-    if let Some(stmt) = try_parse_label_statement(line)? {
-        return Ok(Some(stmt));
-    }
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let s = s.trim();
+        if s.is_empty() {
+            return Err(Self::Err::Empty);
+        }
 
-    if let Some(stmt) = try_parse_a_statement(line)? {
-        return Ok(Some(stmt));
-    }
+        if let Some(stmt) = try_parse_label_statement(s)? {
+            return Ok(stmt);
+        }
 
-    let stmt = parse_c_statement(line)?;
-    Ok(Some(stmt))
+        if let Some(stmt) = try_parse_a_statement(s)? {
+            return Ok(stmt);
+        }
+
+        let stmt = parse_c_statement(s)?;
+        Ok(stmt)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -44,14 +48,6 @@ struct Parts<'a> {
     dest: &'a str,
     comp: &'a str,
     jump: &'a str,
-}
-
-fn trim_spaces_or_comment(s: &str) -> &str {
-    if let Some((pre, _post)) = s.split_once("//") {
-        pre.trim()
-    } else {
-        s.trim()
-    }
 }
 
 fn split_into_parts(s: &str) -> Parts {
@@ -112,20 +108,20 @@ fn read_token(s: &str) -> Option<(Token, &str)> {
     ch.map(|ch| (Token::Punct(ch), cs.as_str().trim()))
 }
 
-fn try_parse_label_statement(s: &str) -> Result<Option<Statement>, ErrorKind> {
+fn try_parse_label_statement(s: &str) -> Result<Option<Statement>, ParseStatementError> {
     let s = s.trim();
 
     if let Some((Token::Punct('('), rest)) = read_token(s) {
         if let Some((Token::Symbol(label), ")")) = read_token(rest) {
             return Ok(Some(Statement::Label(Label::from(label))));
         }
-        return Err(ErrorKind::InvalidLabelStatement(s.into()));
+        return Err(ParseStatementError::InvalidLabelStatement(s.into()));
     }
 
     Ok(None)
 }
 
-fn try_parse_a_statement(s: &str) -> Result<Option<Statement>, ErrorKind> {
+fn try_parse_a_statement(s: &str) -> Result<Option<Statement>, ParseStatementError> {
     let s = s.trim();
 
     if let Some((Token::Punct('@'), rest)) = read_token(s) {
@@ -136,18 +132,18 @@ fn try_parse_a_statement(s: &str) -> Result<Option<Statement>, ErrorKind> {
             Some((Token::Number(num), "")) => {
                 let value = num
                     .parse()
-                    .map_err(|_| ErrorKind::TooLargeNumber(num.into()))?;
+                    .map_err(|_| ParseStatementError::TooLargeNumber(num.into()))?;
                 return Ok(Some(Statement::A(value)));
             }
             _ => {}
         }
-        return Err(ErrorKind::InvalidAStatement(s.into()));
+        return Err(ParseStatementError::InvalidAStatement(s.into()));
     }
 
     Ok(None)
 }
 
-fn parse_dest(s: &str) -> Result<Dest, ErrorKind> {
+fn parse_dest(s: &str) -> Result<Dest, ParseStatementError> {
     let mut m = false;
     let mut d = false;
     let mut a = false;
@@ -157,7 +153,7 @@ fn parse_dest(s: &str) -> Result<Dest, ErrorKind> {
             'D' => d = true,
             'A' => a = true,
             ch if ch.is_ascii_whitespace() => {}
-            _ => return Err(ErrorKind::InvalidCStatementDest(s.into())),
+            _ => return Err(ParseStatementError::InvalidCStatementDest(s.into())),
         }
     }
     let dest = match (a, m, d) {
@@ -173,7 +169,7 @@ fn parse_dest(s: &str) -> Result<Dest, ErrorKind> {
     Ok(dest)
 }
 
-fn parse_comp(s: &str) -> Result<Comp, ErrorKind> {
+fn parse_comp(s: &str) -> Result<Comp, ParseStatementError> {
     let comp = match read_token(s) {
         Some((Token::Number("0"), "")) => Comp::Zero,
         Some((Token::Number("1"), "")) => Comp::One,
@@ -198,7 +194,7 @@ fn parse_comp(s: &str) -> Result<Comp, ErrorKind> {
             Some((Token::Punct('&'), "M")) => Comp::DAndM,
             Some((Token::Punct('|'), "A")) => Comp::DOrA,
             Some((Token::Punct('|'), "M")) => Comp::DOrM,
-            _ => return Err(ErrorKind::InvalidCStatementComp(s.into())),
+            _ => return Err(ParseStatementError::InvalidCStatementComp(s.into())),
         },
         Some((Token::Symbol("A"), rest)) => match read_token(rest) {
             Some((Token::Punct('+'), "1")) => Comp::APlusOne,
@@ -207,7 +203,7 @@ fn parse_comp(s: &str) -> Result<Comp, ErrorKind> {
             Some((Token::Punct('-'), "D")) => Comp::AMinusD,
             Some((Token::Punct('&'), "D")) => Comp::DAndA,
             Some((Token::Punct('|'), "D")) => Comp::DOrA,
-            _ => return Err(ErrorKind::InvalidCStatementComp(s.into())),
+            _ => return Err(ParseStatementError::InvalidCStatementComp(s.into())),
         },
         Some((Token::Symbol("M"), rest)) => match read_token(rest) {
             Some((Token::Punct('+'), "1")) => Comp::MPlusOne,
@@ -216,14 +212,14 @@ fn parse_comp(s: &str) -> Result<Comp, ErrorKind> {
             Some((Token::Punct('-'), "D")) => Comp::MMinusD,
             Some((Token::Punct('&'), "D")) => Comp::DAndM,
             Some((Token::Punct('|'), "D")) => Comp::DOrM,
-            _ => return Err(ErrorKind::InvalidCStatementComp(s.into())),
+            _ => return Err(ParseStatementError::InvalidCStatementComp(s.into())),
         },
-        _ => return Err(ErrorKind::InvalidCStatementComp(s.into())),
+        _ => return Err(ParseStatementError::InvalidCStatementComp(s.into())),
     };
     Ok(comp)
 }
 
-fn parse_jump(s: &str) -> Result<Jump, ErrorKind> {
+fn parse_jump(s: &str) -> Result<Jump, ParseStatementError> {
     let jump = match s.trim() {
         "" => Jump::Null,
         "JGT" => Jump::Gt,
@@ -233,12 +229,12 @@ fn parse_jump(s: &str) -> Result<Jump, ErrorKind> {
         "JNE" => Jump::Ne,
         "JLE" => Jump::Le,
         "JMP" => Jump::Jmp,
-        _ => return Err(ErrorKind::InvalidCStatementJump(s.into())),
+        _ => return Err(ParseStatementError::InvalidCStatementJump(s.into())),
     };
     Ok(jump)
 }
 
-fn parse_c_statement(s: &str) -> Result<Statement, ErrorKind> {
+fn parse_c_statement(s: &str) -> Result<Statement, ParseStatementError> {
     let parts = split_into_parts(s.trim());
     let dest = parse_dest(parts.dest)?;
     let comp = parse_comp(parts.comp)?;
@@ -249,15 +245,6 @@ fn parse_c_statement(s: &str) -> Result<Statement, ErrorKind> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn trim_spaces_or_comment() {
-        use super::trim_spaces_or_comment as t;
-        assert_eq!(t(""), "");
-        assert_eq!(t(" aaa \n"), "aaa");
-        assert_eq!(t("foo bar // baz"), "foo bar");
-        assert_eq!(t("foo bar baz //\n"), "foo bar baz");
-    }
 
     #[test]
     fn split_into_parts() {
@@ -313,11 +300,11 @@ mod tests {
 
         assert!(matches!(
             t("(123)"),
-            Err(ErrorKind::InvalidLabelStatement(s)) if s == "(123)"
+            Err(ParseStatementError::InvalidLabelStatement(s)) if s == "(123)"
         ));
         assert!(matches!(
             t("( foo"),
-            Err(ErrorKind::InvalidLabelStatement(s)) if s == "( foo"
+            Err(ParseStatementError::InvalidLabelStatement(s)) if s == "( foo"
         ));
     }
 
@@ -332,9 +319,13 @@ mod tests {
         );
         assert_eq!(t("@1234").unwrap(), Some(Statement::A(1234)));
         assert_eq!(t("@65535").unwrap(), Some(Statement::A(65535)));
-        assert!(matches!(t("@65536"), Err(ErrorKind::TooLargeNumber(s)) if s == "65536"));
-        assert!(matches!(t("@0x123"), Err(ErrorKind::InvalidAStatement(s)) if s == "@0x123"));
-        assert!(matches!(t("@foo  bar"), Err(ErrorKind::InvalidAStatement(s)) if s == "@foo  bar"));
+        assert!(matches!(t("@65536"), Err(ParseStatementError::TooLargeNumber(s)) if s == "65536"));
+        assert!(
+            matches!(t("@0x123"), Err(ParseStatementError::InvalidAStatement(s)) if s == "@0x123")
+        );
+        assert!(
+            matches!(t("@foo  bar"), Err(ParseStatementError::InvalidAStatement(s)) if s == "@foo  bar")
+        );
     }
 
     #[test]
@@ -351,7 +342,9 @@ mod tests {
 
         assert_eq!(p("M A D").unwrap(), Dest::AMD);
         assert_eq!(p("M A D A M").unwrap(), Dest::AMD);
-        assert!(matches!(p("ABC"), Err(ErrorKind::InvalidCStatementDest(s)) if s == "ABC"));
+        assert!(
+            matches!(p("ABC"), Err(ParseStatementError::InvalidCStatementDest(s)) if s == "ABC")
+        );
     }
 
     #[test]
@@ -389,8 +382,10 @@ mod tests {
         assert_eq!(p(" ! D  ").unwrap(), Comp::NotD);
         assert_eq!(p(" D & M  ").unwrap(), Comp::DAndM);
 
-        assert!(matches!(p("D+A+M"), Err(ErrorKind::InvalidCStatementComp(s)) if s == "D+A+M"));
-        assert!(matches!(p("  "), Err(ErrorKind::InvalidCStatementComp(s)) if s == "  "));
+        assert!(
+            matches!(p("D+A+M"), Err(ParseStatementError::InvalidCStatementComp(s)) if s == "D+A+M")
+        );
+        assert!(matches!(p("  "), Err(ParseStatementError::InvalidCStatementComp(s)) if s == "  "));
     }
 
     #[test]
@@ -407,8 +402,12 @@ mod tests {
 
         assert_eq!(p("  JLE  ").unwrap(), Jump::Le);
 
-        assert!(matches!(p("JGTJEQ"), Err(ErrorKind::InvalidCStatementJump(s)) if s == "JGTJEQ"));
-        assert!(matches!(p("J GT"), Err(ErrorKind::InvalidCStatementJump(s)) if s == "J GT"));
+        assert!(
+            matches!(p("JGTJEQ"), Err(ParseStatementError::InvalidCStatementJump(s)) if s == "JGTJEQ")
+        );
+        assert!(
+            matches!(p("J GT"), Err(ParseStatementError::InvalidCStatementJump(s)) if s == "J GT")
+        );
     }
 
     #[test]
@@ -421,18 +420,9 @@ mod tests {
         assert_eq!(p("0").unwrap(), s(Dest::Null, Comp::Zero, Jump::Null));
         assert_eq!(p("M = 0; JLT").unwrap(), s(Dest::M, Comp::Zero, Jump::Lt));
 
-        assert!(matches!(p(""), Err(ErrorKind::InvalidCStatementComp(s)) if s.is_empty()));
-        assert!(matches!(p("X"), Err(ErrorKind::InvalidCStatementComp(s)) if s == "X"));
-    }
-
-    #[test]
-    fn parse_line() {
-        use super::parse_line as p;
-        assert_eq!(p("").unwrap(), None);
-        assert_eq!(p("// foo").unwrap(), None);
-        assert_eq!(
-            p("M=M+1;JEQ // comment").unwrap(),
-            Some(Statement::C(InstC::new(Dest::M, Comp::MPlusOne, Jump::Eq)))
+        assert!(
+            matches!(p(""), Err(ParseStatementError::InvalidCStatementComp(s)) if s.is_empty())
         );
+        assert!(matches!(p("X"), Err(ParseStatementError::InvalidCStatementComp(s)) if s == "X"));
     }
 }

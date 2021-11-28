@@ -1,25 +1,9 @@
-use crate::{Comp, Dest, Imm, InstC, Instruction, Jump};
-use std::{borrow::Cow, collections::HashMap, fmt};
+pub use self::{assembler::*, parser::*};
+pub use hack::{Comp, Dest, InstC, Jump};
+use std::{borrow::Cow, fmt, hash::Hash};
 
-#[derive(Debug, Clone)]
-pub(crate) struct StatementWithLine {
-    line: u32,
-    data: Statement,
-}
-
-impl StatementWithLine {
-    pub(crate) fn new(line: u32, data: Statement) -> Self {
-        Self { line, data }
-    }
-
-    pub(crate) fn line(&self) -> u32 {
-        self.line
-    }
-
-    pub(crate) fn data(&self) -> &Statement {
-        &self.data
-    }
-}
+mod assembler;
+mod parser;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Statement {
@@ -29,7 +13,7 @@ pub enum Statement {
     C(InstC),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub enum Label {
     SP,
     LCL,
@@ -84,28 +68,6 @@ impl Statement {
     pub fn c(dest: Dest, comp: Comp, jump: Jump) -> Self {
         Self::C(InstC::new(dest, comp, jump))
     }
-
-    pub(crate) fn translate(&self, sym_tab: &HashMap<String, u16>, insts: &mut Vec<Instruction>) {
-        match self {
-            Self::Label(_) => {}
-            Self::AtLabel(label) => {
-                let imm = *sym_tab.get(label.as_str()).unwrap();
-                self.translate_a(imm, insts);
-            }
-            Self::C(c) => insts.push(Instruction::C(*c)),
-            Self::A(a) => self.translate_a(*a, insts),
-        }
-    }
-
-    fn translate_a(&self, a: u16, insts: &mut Vec<Instruction>) {
-        if a <= Imm::MAX.value() {
-            insts.push(Instruction::A(Imm::try_new(a).unwrap()));
-        } else {
-            let not_a = !a;
-            insts.push(Instruction::A(Imm::try_new(not_a).unwrap()));
-            insts.push(Instruction::C(InstC::new(Dest::A, Comp::NotA, Jump::Null)));
-        }
-    }
 }
 
 impl fmt::Display for Label {
@@ -154,6 +116,20 @@ impl From<&'_ str> for Label {
 impl From<String> for Label {
     fn from(s: String) -> Self {
         Label::from(Cow::Owned(s))
+    }
+}
+
+impl PartialEq for Label {
+    fn eq(&self, other: &Self) -> bool {
+        PartialEq::eq(self.as_str(), other.as_str())
+    }
+}
+
+impl Eq for Label {}
+
+impl Hash for Label {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        Hash::hash(self.as_str(), state)
     }
 }
 

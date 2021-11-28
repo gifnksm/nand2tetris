@@ -1,5 +1,6 @@
+use asm::Executable;
 use color_eyre::eyre::{ensure, eyre, Context, Result};
-use hasm::Instruction;
+use hack::Instruction;
 use std::{
     env,
     fs::File,
@@ -25,8 +26,13 @@ fn main() -> Result<()> {
 
     let reader = open_input_file(&input_path)
         .wrap_err_with(|| format!("failed to open input file: {}", input_path.display()))?;
-    let insts = hasm::parse_asm(reader)
+
+    let exec = Executable::from_reader(reader)
         .wrap_err_with(|| format!("failed to parse file: {}", input_path.display()))?;
+    let insts = exec
+        .assemble()
+        .wrap_err_with(|| format!("failed to assemble file: {}", input_path.display()))?;
+
     let writer = create_output_file(&output_dir).wrap_err_with(|| {
         format!(
             "failed to create output file in directory: {}",

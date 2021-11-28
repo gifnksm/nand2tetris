@@ -1,5 +1,5 @@
 [package]
-name = "vmtrans"
+name = "vm"
 version = "0.1.0"
 edition = "2021"
 
@@ -7,7 +7,5 @@ edition = "2021"
 
 [dependencies]
 asm = { path = "../asm" }
-color-eyre = "0.5.11"
+hack = { path = "../hack" }
 thiserror = "1.0.30"
-tempfile = "3.2.0"
-vm = { path = "../vm" }

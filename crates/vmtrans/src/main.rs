@@ -1,12 +1,12 @@
+use asm::Statement;
 use color_eyre::eyre::{ensure, eyre, Context, Result};
-use hasm::Statement;
 use std::{
     env,
     io::{prelude::*, BufWriter},
     path::{Path, PathBuf},
 };
 use tempfile::NamedTempFile;
-use vmtrans::Executable;
+use vm::Executable;
 
 #[derive(Debug)]
 struct Params {
