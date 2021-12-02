@@ -1,11 +1,12 @@
 [package]
-name = "hdisasm"
+name = "jack-analyzer"
 version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-asm = { path = "../asm" }
-common = { path = "../common" }
 color-eyre = "0.5.11"
+common = { path = "../common" }
+jack = { path = "../jack" }
+thiserror = "1.0.30"

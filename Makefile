@@ -7,7 +7,7 @@ MAKEFLAGS += --no-builtin-rules
 
 SUBDIRS = $(wildcard [0-9][0-9])
 
-all: tools $(patsubst %,all-%,$(SUBDIRS))
+all: tools cargo-check cargo-clippy cargo-build cargo-build-release cargo-doc $(patsubst %,all-%,$(SUBDIRS))
 .PHONY: all
 
 clean: $(patsubst %,clean-%,$(SUBDIRS))
@@ -37,6 +37,26 @@ clean-%:
 test-%: tools
 	$(MAKE) -C $(patsubst test-%,%,$@) test
 .PHONY: test-%
+
+cargo-check:
+	cargo check
+.PHONY: cargo-check
+
+cargo-clippy:
+	cargo clippy
+.PHONY: cargo-clippy
+
+cargo-build:
+	cargo build
+.PHONY: cargo-build
+
+cargo-build-release:
+	cargo build --release
+.PHONY: cargo-build-release
+
+cargo-doc:
+	cargo doc --no-deps
+.PHONY: cargo-doc
 
 test-cargo:
 	cargo test
