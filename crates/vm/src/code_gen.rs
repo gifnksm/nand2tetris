@@ -182,7 +182,7 @@ impl<'a> CodeGen<'a> {
         self.load_address_d(AsmLabel::LCL);
         self.store_d_address(AsmLabel::R13);
         // RAM[R14] = RAM[RAM[R13] - 5]
-        set(&mut self.stmts, AsmLabel::R14, AsmLabel::R13, 5);
+        set(self.stmts, AsmLabel::R14, AsmLabel::R13, 5);
         // RAM[RAM[ARG]] = pop()
         self.pop_d();
         self.stmts.extend([
@@ -198,13 +198,13 @@ impl<'a> CodeGen<'a> {
             S::c(Dest::M, Comp::D, Jump::Null),
         ]);
         // RAM[THAT] = RAM[RAM[R13] - 1]
-        set(&mut self.stmts, AsmLabel::THAT, AsmLabel::R13, 1);
+        set(self.stmts, AsmLabel::THAT, AsmLabel::R13, 1);
         // RAM[THIS] = RAM[RAM[R13] - 2]
-        set(&mut self.stmts, AsmLabel::THIS, AsmLabel::R13, 2);
+        set(self.stmts, AsmLabel::THIS, AsmLabel::R13, 2);
         // RAM[ARG] = RAM[RAM[R13] - 3]
-        set(&mut self.stmts, AsmLabel::ARG, AsmLabel::R13, 3);
+        set(self.stmts, AsmLabel::ARG, AsmLabel::R13, 3);
         // RAM[LCL] = RAM[RAM[R13] - 4]
-        set(&mut self.stmts, AsmLabel::LCL, AsmLabel::R13, 4);
+        set(self.stmts, AsmLabel::LCL, AsmLabel::R13, 4);
         // goto RAM[R14]
         self.stmts.extend([
             S::at_label(AsmLabel::R14),

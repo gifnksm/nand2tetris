@@ -1,22 +1,11 @@
 pub use self::parser::*;
-use crate::{Command, FunctionTable, ParseExecutableError};
-use std::{
-    borrow::Borrow,
-    fmt,
-    fs::File,
-    io::BufReader,
-    path::{Path, PathBuf},
-    str::FromStr,
-};
+use crate::{FunctionTable, ParseExecutableError};
+use std::{borrow::Borrow, fmt, fs::File, io::BufReader, path::Path, str::FromStr};
 
 mod parser;
 
 #[derive(Debug, Clone)]
-pub(crate) struct Module {
-    name: ModuleName,
-    path: PathBuf,
-    commands: Vec<Command>,
-}
+pub(crate) struct Module {}
 
 impl Module {
     pub(crate) fn open(
@@ -35,10 +24,6 @@ impl Module {
             File::open(&path).map_err(|e| ParseExecutableError::ModuleOpen(path.clone(), e))?;
         let reader = BufReader::new(file);
         Self::from_reader(name, path, reader, functions)
-    }
-
-    pub(crate) fn name(&self) -> &ModuleName {
-        &self.name
     }
 }
 

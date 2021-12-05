@@ -6,7 +6,7 @@ impl Executable {
         let stmts = exec
             .instructions()
             .iter()
-            .map(|inst| Statement::disassemble(inst))
+            .map(Statement::disassemble)
             .collect();
         Self { stmts }
     }

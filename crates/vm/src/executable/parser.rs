@@ -10,15 +10,13 @@ impl Executable {
         let mut functions = FunctionTable::new();
         let modules = module_paths
             .iter()
-            .map(|path| {
-                Module::open(path, &mut functions).map(|module| (module.name().to_owned(), module))
-            })
-            .collect::<Result<BTreeMap<_, _>, _>>()?;
+            .map(|path| Module::open(path, &mut functions))
+            .collect::<Result<Vec<_>, _>>()?;
         if modules.is_empty() {
             return Err(ParseExecutableError::NoModules);
         }
         let functions = functions.finish()?;
-        Ok(Self { modules, functions })
+        Ok(Self { functions })
     }
 }
 

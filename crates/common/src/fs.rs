@@ -8,7 +8,6 @@ use thiserror::Error;
 
 #[derive(Debug)]
 pub struct FileReader {
-    path: PathBuf,
     file: BufReader<File>,
 }
 
@@ -24,7 +23,6 @@ impl FileReader {
         let file =
             File::open(&path).map_err(|e| FileReaderOpenError::OpenInDir(path.clone(), e))?;
         Ok(FileReader {
-            path,
             file: BufReader::new(file),
         })
     }

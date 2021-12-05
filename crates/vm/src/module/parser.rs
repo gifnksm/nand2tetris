@@ -29,17 +29,13 @@ impl Module {
                 )
             })?;
             if res == 0 {
-                let commands = parser.finish(line).map_err(|e| {
+                parser.finish(line).map_err(|e| {
                     ParseExecutableError::ParseModule(
                         name.clone(),
                         ParseModuleError::new(path.clone(), line, e),
                     )
                 })?;
-                return Ok(Self {
-                    name,
-                    path,
-                    commands,
-                });
+                return Ok(Self {});
             }
             parser.parse_line(&line_buf, line).map_err(|e| {
                 ParseExecutableError::ParseModule(
@@ -152,9 +148,9 @@ impl<'a> Parser<'a> {
         Ok(())
     }
 
-    fn finish(mut self, line: u32) -> Result<Vec<Command>, ParseModuleErrorKind> {
+    fn finish(mut self, line: u32) -> Result<(), ParseModuleErrorKind> {
         self.finish_func(line)?;
-        Ok(self.commands)
+        Ok(())
     }
 }
 

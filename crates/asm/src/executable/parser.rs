@@ -33,9 +33,7 @@ impl Executable {
                         }
                     },
                     Statement::AtLabel(name) => {
-                        symbols
-                            .entry(name.clone())
-                            .or_insert(Symbol::Undefined { line });
+                        symbols.entry(name.clone()).or_insert(Symbol::Undefined {});
                     }
                     Statement::A(_) | Statement::C(_) => {}
                 }
@@ -67,7 +65,7 @@ fn trim_spaces_or_comment(s: &str) -> &str {
 #[derive(Debug, Clone)]
 enum Symbol {
     Defined { line: u32 },
-    Undefined { line: u32 },
+    Undefined {},
 }
 
 impl Symbol {
