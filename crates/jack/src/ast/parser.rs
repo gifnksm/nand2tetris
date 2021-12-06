@@ -198,7 +198,10 @@ where
 mod private {
     use super::*;
     pub trait FromTokensImpl {
-        fn context() -> Option<String>;
+        fn context() -> Option<String> {
+            None
+        }
+
         fn is_start_token(token: &Token) -> bool;
 
         fn from_tokens_impl<I, E>(tokens: &mut Prependable<I>) -> Result<Self, ParseError<E>>
@@ -297,10 +300,6 @@ impl FromTokensImpl for ClassVar {
 impl FromTokens for ClassVar {}
 
 impl FromTokensImpl for ClassVarKind {
-    fn context() -> Option<String> {
-        None
-    }
-
     fn is_start_token(token: &Token) -> bool {
         matches!(token, Token::Keyword(Keyword::Static | Keyword::Field))
     }
@@ -323,10 +322,6 @@ impl FromTokensImpl for ClassVarKind {
 impl FromTokens for ClassVarKind {}
 
 impl FromTokensImpl for Type {
-    fn context() -> Option<String> {
-        None
-    }
-
     fn is_start_token(token: &Token) -> bool {
         matches!(
             token,
@@ -386,10 +381,6 @@ impl FromTokensImpl for Subroutine {
 impl FromTokens for Subroutine {}
 
 impl FromTokensImpl for SubroutineKind {
-    fn context() -> Option<String> {
-        None
-    }
-
     fn is_start_token(token: &Token) -> bool {
         matches!(
             token,
@@ -416,10 +407,6 @@ impl FromTokensImpl for SubroutineKind {
 impl FromTokens for SubroutineKind {}
 
 impl FromTokensImpl for Parameter {
-    fn context() -> Option<String> {
-        None
-    }
-
     fn is_start_token(token: &Token) -> bool {
         Type::is_start_token(token)
     }
@@ -486,10 +473,6 @@ impl FromTokensImpl for Var {
 impl FromTokens for Var {}
 
 impl FromTokensImpl for Statement {
-    fn context() -> Option<String> {
-        None
-    }
-
     fn is_start_token(token: &Token) -> bool {
         LetStatement::is_start_token(token)
             || IfStatement::is_start_token(token)
@@ -671,10 +654,6 @@ impl FromTokensImpl for ReturnStatement {
 impl FromTokens for ReturnStatement {}
 
 impl FromTokensImpl for Expression {
-    fn context() -> Option<String> {
-        None
-    }
-
     fn is_start_token(token: &Token) -> bool {
         Term::is_start_token(token)
     }
@@ -697,10 +676,6 @@ impl FromTokensImpl for Expression {
 impl FromTokens for Expression {}
 
 impl FromTokensImpl for Term {
-    fn context() -> Option<String> {
-        None
-    }
-
     fn is_start_token(token: &Token) -> bool {
         matches!(
             token,
@@ -761,10 +736,6 @@ impl FromTokensImpl for Term {
 impl FromTokens for Term {}
 
 impl FromTokensImpl for SubroutineCall {
-    fn context() -> Option<String> {
-        None
-    }
-
     fn is_start_token(token: &Token) -> bool {
         matches!(token, Token::Ident(_))
     }
@@ -807,10 +778,6 @@ impl SubroutineCall {
 }
 
 impl FromTokensImpl for BinaryOp {
-    fn context() -> Option<String> {
-        None
-    }
-
     fn is_start_token(token: &Token) -> bool {
         matches!(
             token,
@@ -853,10 +820,6 @@ impl FromTokensImpl for BinaryOp {
 impl FromTokens for BinaryOp {}
 
 impl FromTokensImpl for UnaryOp {
-    fn context() -> Option<String> {
-        None
-    }
-
     fn is_start_token(token: &Token) -> bool {
         matches!(token, Token::Symbol(Symbol::Minus | Symbol::Tilde))
     }
@@ -879,10 +842,6 @@ impl FromTokensImpl for UnaryOp {
 impl FromTokens for UnaryOp {}
 
 impl FromTokensImpl for KeywordConstant {
-    fn context() -> Option<String> {
-        None
-    }
-
     fn is_start_token(token: &Token) -> bool {
         matches!(
             token,
