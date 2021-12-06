@@ -27,30 +27,33 @@ fn expected<E>(expected: impl Into<String>, found: WithLoc<Token>) -> ParseError
 
 trait TokensExt<E> {
     fn token(&mut self) -> Result<WithLoc<Token>, ParseError<E>>;
-    fn try_token_with<T, F>(&mut self, f: F) -> Result<Option<T>, ParseError<E>>
+    fn try_token_with<T, F>(&mut self, f: F) -> Result<Option<WithLoc<T>>, ParseError<E>>
     where
         F: FnOnce(Token) -> Result<T, Token>;
-    fn token_with<T, F>(&mut self, f: F) -> Result<Result<T, WithLoc<Token>>, ParseError<E>>
+    fn token_with<T, F>(
+        &mut self,
+        f: F,
+    ) -> Result<Result<WithLoc<T>, WithLoc<Token>>, ParseError<E>>
     where
         F: FnOnce(Token) -> Result<T, Token>;
-    fn try_keyword(&mut self, keyword: Keyword) -> Result<Option<Keyword>, ParseError<E>>;
-    fn keyword(&mut self, keyword: Keyword) -> Result<Keyword, ParseError<E>>;
-    fn try_symbol(&mut self, symbol: Symbol) -> Result<Option<Symbol>, ParseError<E>>;
-    fn symbol(&mut self, symbol: Symbol) -> Result<Symbol, ParseError<E>>;
-    fn try_ident(&mut self) -> Result<Option<Ident>, ParseError<E>>;
-    fn ident(&mut self) -> Result<Ident, ParseError<E>>;
-    fn try_int(&mut self) -> Result<Option<u16>, ParseError<E>>;
-    fn try_string(&mut self) -> Result<Option<String>, ParseError<E>>;
-    fn void_or_type(&mut self) -> Result<Option<Type>, ParseError<E>>;
-    fn repeat_opt<F, T>(&mut self, f: F) -> Result<Vec<T>, ParseError<E>>
+    fn try_keyword(&mut self, keyword: Keyword) -> Result<Option<WithLoc<Keyword>>, ParseError<E>>;
+    fn keyword(&mut self, keyword: Keyword) -> Result<WithLoc<Keyword>, ParseError<E>>;
+    fn try_symbol(&mut self, symbol: Symbol) -> Result<Option<WithLoc<Symbol>>, ParseError<E>>;
+    fn symbol(&mut self, symbol: Symbol) -> Result<WithLoc<Symbol>, ParseError<E>>;
+    fn try_ident(&mut self) -> Result<Option<WithLoc<Ident>>, ParseError<E>>;
+    fn ident(&mut self) -> Result<WithLoc<Ident>, ParseError<E>>;
+    fn try_int(&mut self) -> Result<Option<WithLoc<u16>>, ParseError<E>>;
+    fn try_string(&mut self) -> Result<Option<WithLoc<String>>, ParseError<E>>;
+    fn void_or_type(&mut self) -> Result<Option<WithLoc<Type>>, ParseError<E>>;
+    fn repeat_opt<F, T>(&mut self, f: F) -> Result<Vec<WithLoc<T>>, ParseError<E>>
     where
-        F: FnMut(&mut Self) -> Result<Option<T>, ParseError<E>>;
-    fn comma_separated<F, T>(&mut self, f: F) -> Result<Vec<T>, ParseError<E>>
+        F: FnMut(&mut Self) -> Result<Option<WithLoc<T>>, ParseError<E>>;
+    fn comma_separated<F, T>(&mut self, f: F) -> Result<Vec<WithLoc<T>>, ParseError<E>>
     where
-        F: FnMut(&mut Self) -> Result<T, ParseError<E>>;
-    fn comma_separated_opt<F, T>(&mut self, f: F) -> Result<Vec<T>, ParseError<E>>
+        F: FnMut(&mut Self) -> Result<WithLoc<T>, ParseError<E>>;
+    fn comma_separated_opt<F, T>(&mut self, f: F) -> Result<Vec<WithLoc<T>>, ParseError<E>>
     where
-        F: FnMut(&mut Self) -> Result<Option<T>, ParseError<E>>;
+        F: FnMut(&mut Self) -> Result<Option<WithLoc<T>>, ParseError<E>>;
 }
 
 impl<I, E> TokensExt<E> for Prependable<I>
@@ -62,7 +65,7 @@ where
         Ok(self.next().ok_or(ParseError::UnexpectedEof)??)
     }
 
-    fn try_token_with<T, F>(&mut self, f: F) -> Result<Option<T>, ParseError<E>>
+    fn try_token_with<T, F>(&mut self, f: F) -> Result<Option<WithLoc<T>>, ParseError<E>>
     where
         F: FnOnce(Token) -> Result<T, Token>,
     {
@@ -70,7 +73,7 @@ where
             .next()
             .transpose()?
             .and_then(|token| match token.map(f).transpose() {
-                Ok(val) => Some(val.data),
+                Ok(val) => Some(val),
                 Err(token) => {
                     self.prepend(Ok(token));
                     None
@@ -78,21 +81,24 @@ where
             }))
     }
 
-    fn token_with<T, F>(&mut self, f: F) -> Result<Result<T, WithLoc<Token>>, ParseError<E>>
+    fn token_with<T, F>(
+        &mut self,
+        f: F,
+    ) -> Result<Result<WithLoc<T>, WithLoc<Token>>, ParseError<E>>
     where
         F: FnOnce(Token) -> Result<T, Token>,
     {
-        Ok(self.token()?.map(f).transpose().map(|val| val.data))
+        Ok(self.token()?.map(f).transpose())
     }
 
-    fn try_keyword(&mut self, keyword: Keyword) -> Result<Option<Keyword>, ParseError<E>> {
+    fn try_keyword(&mut self, keyword: Keyword) -> Result<Option<WithLoc<Keyword>>, ParseError<E>> {
         self.try_token_with(|token| match token {
             Token::Keyword(kw) if kw == keyword => Ok(kw),
             _ => Err(token),
         })
     }
 
-    fn keyword(&mut self, keyword: Keyword) -> Result<Keyword, ParseError<E>> {
+    fn keyword(&mut self, keyword: Keyword) -> Result<WithLoc<Keyword>, ParseError<E>> {
         self.token_with(|token| match token {
             Token::Keyword(kw) if kw == keyword => Ok(kw),
             token => Err(token),
@@ -100,14 +106,14 @@ where
         .map_err(|token| expected(format!("`keyword {}`", keyword), token))
     }
 
-    fn try_symbol(&mut self, symbol: Symbol) -> Result<Option<Symbol>, ParseError<E>> {
+    fn try_symbol(&mut self, symbol: Symbol) -> Result<Option<WithLoc<Symbol>>, ParseError<E>> {
         self.try_token_with(|token| match token {
             Token::Symbol(sym) if sym == symbol => Ok(sym),
             _ => Err(token),
         })
     }
 
-    fn symbol(&mut self, symbol: Symbol) -> Result<Symbol, ParseError<E>> {
+    fn symbol(&mut self, symbol: Symbol) -> Result<WithLoc<Symbol>, ParseError<E>> {
         self.token_with(|token| match token {
             Token::Symbol(sym) if sym == symbol => Ok(sym),
             token => Err(token),
@@ -115,14 +121,14 @@ where
         .map_err(|token| expected(format!("symbol `{}`", symbol), token))
     }
 
-    fn try_ident(&mut self) -> Result<Option<Ident>, ParseError<E>> {
+    fn try_ident(&mut self) -> Result<Option<WithLoc<Ident>>, ParseError<E>> {
         self.try_token_with(|token| match token {
             Token::Ident(ident) => Ok(ident),
             _ => Err(token),
         })
     }
 
-    fn ident(&mut self) -> Result<Ident, ParseError<E>> {
+    fn ident(&mut self) -> Result<WithLoc<Ident>, ParseError<E>> {
         self.token_with(|token| match token {
             Token::Ident(ident) => Ok(ident),
             token => Err(token),
@@ -130,21 +136,21 @@ where
         .map_err(|token| expected("ident", token))
     }
 
-    fn try_int(&mut self) -> Result<Option<u16>, ParseError<E>> {
+    fn try_int(&mut self) -> Result<Option<WithLoc<u16>>, ParseError<E>> {
         self.try_token_with(|token| match token {
             Token::Int(n) => Ok(n),
             token => Err(token),
         })
     }
 
-    fn try_string(&mut self) -> Result<Option<String>, ParseError<E>> {
+    fn try_string(&mut self) -> Result<Option<WithLoc<String>>, ParseError<E>> {
         self.try_token_with(|token| match token {
             Token::String(s) => Ok(s),
             token => Err(token),
         })
     }
 
-    fn void_or_type(&mut self) -> Result<Option<Type>, ParseError<E>> {
+    fn void_or_type(&mut self) -> Result<Option<WithLoc<Type>>, ParseError<E>> {
         if self.try_keyword(Keyword::Void)?.is_some() {
             return Ok(None);
         }
@@ -154,9 +160,9 @@ where
         Err(expected("type of `void`", self.token()?))
     }
 
-    fn repeat_opt<F, T>(&mut self, mut f: F) -> Result<Vec<T>, ParseError<E>>
+    fn repeat_opt<F, T>(&mut self, mut f: F) -> Result<Vec<WithLoc<T>>, ParseError<E>>
     where
-        F: FnMut(&mut Self) -> Result<Option<T>, ParseError<E>>,
+        F: FnMut(&mut Self) -> Result<Option<WithLoc<T>>, ParseError<E>>,
     {
         let mut values = vec![];
         while let Some(val) = f(self)? {
@@ -165,9 +171,9 @@ where
         Ok(values)
     }
 
-    fn comma_separated<F, T>(&mut self, mut f: F) -> Result<Vec<T>, ParseError<E>>
+    fn comma_separated<F, T>(&mut self, mut f: F) -> Result<Vec<WithLoc<T>>, ParseError<E>>
     where
-        F: FnMut(&mut Self) -> Result<T, ParseError<E>>,
+        F: FnMut(&mut Self) -> Result<WithLoc<T>, ParseError<E>>,
     {
         let mut values = vec![f(self)?];
         while self.try_symbol(Symbol::Comma)?.is_some() {
@@ -176,9 +182,9 @@ where
         Ok(values)
     }
 
-    fn comma_separated_opt<F, T>(&mut self, mut f: F) -> Result<Vec<T>, ParseError<E>>
+    fn comma_separated_opt<F, T>(&mut self, mut f: F) -> Result<Vec<WithLoc<T>>, ParseError<E>>
     where
-        F: FnMut(&mut Self) -> Result<Option<T>, ParseError<E>>,
+        F: FnMut(&mut Self) -> Result<Option<WithLoc<T>>, ParseError<E>>,
     {
         let mut values = vec![];
         loop {
@@ -204,16 +210,21 @@ mod private {
 
         fn is_start_token(token: &Token) -> bool;
 
-        fn from_tokens_impl<I, E>(tokens: &mut Prependable<I>) -> Result<Self, ParseError<E>>
+        fn from_tokens_impl<I, E>(_tokens: &mut Prependable<I>) -> Result<Self, ParseError<E>>
         where
             Self: Sized,
             I: Iterator<Item = Result<WithLoc<Token>, E>>,
-            E: StdError + Send + Sync + 'static;
+            E: StdError + Send + Sync + 'static,
+        {
+            unimplemented!()
+        }
     }
 }
 
 pub trait FromTokens: FromTokensImpl {
-    fn try_from_tokens<I, E>(tokens: &mut Prependable<I>) -> Result<Option<Self>, ParseError<E>>
+    fn try_from_tokens<I, E>(
+        tokens: &mut Prependable<I>,
+    ) -> Result<Option<WithLoc<Self>>, ParseError<E>>
     where
         Self: Sized,
         I: Iterator<Item = Result<WithLoc<Token>, E>>,
@@ -227,7 +238,7 @@ pub trait FromTokens: FromTokensImpl {
         }
     }
 
-    fn from_tokens<I, E>(tokens: &mut Prependable<I>) -> Result<Self, ParseError<E>>
+    fn from_tokens<I, E>(tokens: &mut Prependable<I>) -> Result<WithLoc<Self>, ParseError<E>>
     where
         Self: Sized,
         I: Iterator<Item = Result<WithLoc<Token>, E>>,
@@ -237,13 +248,15 @@ pub trait FromTokens: FromTokensImpl {
             .peek()
             .and_then(|token| token.as_ref().ok())
             .map(|token| token.loc);
-        Self::from_tokens_impl(tokens).map_err(|e| {
+        let data = Self::from_tokens_impl(tokens).map_err(|e| {
             if let Some(context) = Self::context() {
                 ParseError::Context(context, loc, Box::new(e))
             } else {
                 e
             }
-        })
+        })?;
+        let loc = loc.unwrap();
+        Ok(WithLoc { loc, data })
     }
 }
 
@@ -303,8 +316,9 @@ impl FromTokensImpl for ClassVarKind {
     fn is_start_token(token: &Token) -> bool {
         matches!(token, Token::Keyword(Keyword::Static | Keyword::Field))
     }
-
-    fn from_tokens_impl<I, E>(tokens: &mut Prependable<I>) -> Result<Self, ParseError<E>>
+}
+impl FromTokens for ClassVarKind {
+    fn from_tokens<I, E>(tokens: &mut Prependable<I>) -> Result<WithLoc<Self>, ParseError<E>>
     where
         Self: Sized,
         I: Iterator<Item = Result<WithLoc<Token>, E>>,
@@ -319,7 +333,6 @@ impl FromTokensImpl for ClassVarKind {
             .map_err(|token| expected("`static` or `field`", token))
     }
 }
-impl FromTokens for ClassVarKind {}
 
 impl FromTokensImpl for Type {
     fn is_start_token(token: &Token) -> bool {
@@ -328,9 +341,11 @@ impl FromTokensImpl for Type {
             Token::Keyword(Keyword::Int | Keyword::Char | Keyword::Boolean) | Token::Ident(_)
         )
     }
-
-    fn from_tokens_impl<I, E>(tokens: &mut Prependable<I>) -> Result<Self, ParseError<E>>
+}
+impl FromTokens for Type {
+    fn from_tokens<I, E>(tokens: &mut Prependable<I>) -> Result<WithLoc<Self>, ParseError<E>>
     where
+        Self: Sized,
         I: Iterator<Item = Result<WithLoc<Token>, E>>,
         E: StdError + Send + Sync + 'static,
     {
@@ -345,7 +360,6 @@ impl FromTokensImpl for Type {
             .map_err(|token| expected("`int`, `char`, `boolean` or class name", token))
     }
 }
-impl FromTokens for Type {}
 
 impl FromTokensImpl for Subroutine {
     fn context() -> Option<String> {
@@ -366,7 +380,7 @@ impl FromTokensImpl for Subroutine {
         let return_type = tokens.void_or_type()?;
         let name = tokens.ident()?;
         tokens.symbol(Symbol::OpenParen)?;
-        let params = tokens.comma_separated_opt(Parameter::try_from_tokens)?;
+        let params = ParameterList::from_tokens(tokens)?;
         tokens.symbol(Symbol::CloseParen)?;
         let body = SubroutineBody::from_tokens(tokens)?;
         Ok(Self {
@@ -387,8 +401,9 @@ impl FromTokensImpl for SubroutineKind {
             Token::Keyword(Keyword::Constructor | Keyword::Function | Keyword::Method)
         )
     }
-
-    fn from_tokens_impl<I, E>(tokens: &mut Prependable<I>) -> Result<Self, ParseError<E>>
+}
+impl FromTokens for SubroutineKind {
+    fn from_tokens<I, E>(tokens: &mut Prependable<I>) -> Result<WithLoc<Self>, ParseError<E>>
     where
         Self: Sized,
         I: Iterator<Item = Result<WithLoc<Token>, E>>,
@@ -404,7 +419,24 @@ impl FromTokensImpl for SubroutineKind {
             .map_err(|token| expected("`constructor` or `method`", token))
     }
 }
-impl FromTokens for SubroutineKind {}
+
+impl FromTokensImpl for ParameterList {
+    fn is_start_token(token: &Token) -> bool {
+        Parameter::is_start_token(token)
+    }
+
+    fn from_tokens_impl<I, E>(tokens: &mut Prependable<I>) -> Result<Self, ParseError<E>>
+    where
+        Self: Sized,
+        I: Iterator<Item = Result<WithLoc<Token>, E>>,
+        E: StdError + Send + Sync + 'static,
+    {
+        Ok(Self(
+            tokens.comma_separated_opt(Parameter::try_from_tokens)?,
+        ))
+    }
+}
+impl FromTokens for ParameterList {}
 
 impl FromTokensImpl for Parameter {
     fn is_start_token(token: &Token) -> bool {
@@ -441,7 +473,7 @@ impl FromTokensImpl for SubroutineBody {
     {
         tokens.symbol(Symbol::OpenBrace)?;
         let vars = tokens.repeat_opt(Var::try_from_tokens)?;
-        let stmts = tokens.repeat_opt(Statement::try_from_tokens)?;
+        let stmts = StatementList::from_tokens(tokens)?;
         tokens.symbol(Symbol::CloseBrace)?;
         Ok(Self { vars, stmts })
     }
@@ -471,6 +503,22 @@ impl FromTokensImpl for Var {
     }
 }
 impl FromTokens for Var {}
+
+impl FromTokensImpl for StatementList {
+    fn is_start_token(token: &Token) -> bool {
+        Statement::is_start_token(token)
+    }
+
+    fn from_tokens_impl<I, E>(tokens: &mut Prependable<I>) -> Result<Self, ParseError<E>>
+    where
+        Self: Sized,
+        I: Iterator<Item = Result<WithLoc<Token>, E>>,
+        E: StdError + Send + Sync + 'static,
+    {
+        Ok(Self(tokens.repeat_opt(Statement::try_from_tokens)?))
+    }
+}
+impl FromTokens for StatementList {}
 
 impl FromTokensImpl for Statement {
     fn is_start_token(token: &Token) -> bool {
@@ -561,12 +609,12 @@ impl FromTokensImpl for IfStatement {
         let cond = Expression::from_tokens(tokens)?;
         tokens.symbol(Symbol::CloseParen)?;
         tokens.symbol(Symbol::OpenBrace)?;
-        let then_stmts = tokens.repeat_opt(Statement::try_from_tokens)?;
+        let then_stmts = StatementList::from_tokens(tokens)?;
         tokens.symbol(Symbol::CloseBrace)?;
         let mut else_stmts = None;
         if tokens.try_keyword(Keyword::Else)?.is_some() {
             tokens.symbol(Symbol::OpenBrace)?;
-            else_stmts = Some(tokens.repeat_opt(Statement::try_from_tokens)?);
+            else_stmts = Some(StatementList::from_tokens(tokens)?);
             tokens.symbol(Symbol::CloseBrace)?;
         }
         Ok(Self {
@@ -598,7 +646,7 @@ impl FromTokensImpl for WhileStatement {
         let cond = Expression::from_tokens(tokens)?;
         tokens.symbol(Symbol::CloseParen)?;
         tokens.symbol(Symbol::OpenBrace)?;
-        let stmts = tokens.repeat_opt(Statement::try_from_tokens)?;
+        let stmts = StatementList::from_tokens(tokens)?;
         tokens.symbol(Symbol::CloseBrace)?;
         Ok(Self { cond, stmts })
     }
@@ -716,8 +764,9 @@ impl FromTokensImpl for Term {
                 }))
             );
             if is_subroutime_call {
-                let subroutine_call = SubroutineCall::from_tokens_with_ident(var, tokens)?;
-                return Ok(Self::SubroutineCall(subroutine_call));
+                let loc = var.loc;
+                let data = SubroutineCall::from_tokens_with_ident(var, tokens)?;
+                return Ok(Self::SubroutineCall(WithLoc { loc, data }));
             }
             return Ok(Self::Variable(var));
         }
@@ -754,7 +803,7 @@ impl FromTokens for SubroutineCall {}
 
 impl SubroutineCall {
     fn from_tokens_with_ident<I, E>(
-        ident: Ident,
+        ident: WithLoc<Ident>,
         tokens: &mut Prependable<I>,
     ) -> Result<Self, ParseError<E>>
     where
@@ -767,7 +816,7 @@ impl SubroutineCall {
             prop = Some(tokens.ident()?);
         }
         tokens.symbol(Symbol::OpenParen)?;
-        let args = tokens.comma_separated_opt(Expression::try_from_tokens)?;
+        let args = ExpressionList::from_tokens(tokens)?;
         tokens.symbol(Symbol::CloseParen)?;
         if let Some(prop) = prop {
             Ok(Self::PropertyCall(ident, prop, args))
@@ -776,6 +825,24 @@ impl SubroutineCall {
         }
     }
 }
+
+impl FromTokensImpl for ExpressionList {
+    fn is_start_token(token: &Token) -> bool {
+        Expression::is_start_token(token)
+    }
+
+    fn from_tokens_impl<I, E>(tokens: &mut Prependable<I>) -> Result<Self, ParseError<E>>
+    where
+        Self: Sized,
+        I: Iterator<Item = Result<WithLoc<Token>, E>>,
+        E: StdError + Send + Sync + 'static,
+    {
+        Ok(Self(
+            tokens.comma_separated_opt(Expression::try_from_tokens)?,
+        ))
+    }
+}
+impl FromTokens for ExpressionList {}
 
 impl FromTokensImpl for BinaryOp {
     fn is_start_token(token: &Token) -> bool {
@@ -794,8 +861,9 @@ impl FromTokensImpl for BinaryOp {
             )
         )
     }
-
-    fn from_tokens_impl<I, E>(tokens: &mut Prependable<I>) -> Result<Self, ParseError<E>>
+}
+impl FromTokens for BinaryOp {
+    fn from_tokens<I, E>(tokens: &mut Prependable<I>) -> Result<WithLoc<Self>, ParseError<E>>
     where
         Self: Sized,
         I: Iterator<Item = Result<WithLoc<Token>, E>>,
@@ -817,14 +885,14 @@ impl FromTokensImpl for BinaryOp {
             .map_err(|token| expected("binary operator", token))
     }
 }
-impl FromTokens for BinaryOp {}
 
 impl FromTokensImpl for UnaryOp {
     fn is_start_token(token: &Token) -> bool {
         matches!(token, Token::Symbol(Symbol::Minus | Symbol::Tilde))
     }
-
-    fn from_tokens_impl<I, E>(tokens: &mut Prependable<I>) -> Result<Self, ParseError<E>>
+}
+impl FromTokens for UnaryOp {
+    fn from_tokens<I, E>(tokens: &mut Prependable<I>) -> Result<WithLoc<Self>, ParseError<E>>
     where
         Self: Sized,
         I: Iterator<Item = Result<WithLoc<Token>, E>>,
@@ -839,7 +907,6 @@ impl FromTokensImpl for UnaryOp {
             .map_err(|token| expected("`-` or `~`", token))
     }
 }
-impl FromTokens for UnaryOp {}
 
 impl FromTokensImpl for KeywordConstant {
     fn is_start_token(token: &Token) -> bool {
@@ -848,8 +915,9 @@ impl FromTokensImpl for KeywordConstant {
             Token::Keyword(Keyword::True | Keyword::False | Keyword::Null | Keyword::This)
         )
     }
-
-    fn from_tokens_impl<I, E>(tokens: &mut Prependable<I>) -> Result<Self, ParseError<E>>
+}
+impl FromTokens for KeywordConstant {
+    fn from_tokens<I, E>(tokens: &mut Prependable<I>) -> Result<WithLoc<Self>, ParseError<E>>
     where
         Self: Sized,
         I: Iterator<Item = Result<WithLoc<Token>, E>>,
@@ -866,4 +934,3 @@ impl FromTokensImpl for KeywordConstant {
             .map_err(|token| expected("`true`, `false`, `null` or `this`", token))
     }
 }
-impl FromTokens for KeywordConstant {}

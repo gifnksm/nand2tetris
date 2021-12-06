@@ -1,3 +1,4 @@
+use crate::xml::XmlWriter;
 use color_eyre::eyre::{ensure, Result};
 use common::{
     fs::FileReader,
@@ -7,8 +8,6 @@ use jack::{Class, FromTokens, Tokens};
 use std::{env, path::PathBuf};
 use thiserror::Error;
 use token::TokenWriter;
-
-use crate::ast::AstWriter;
 
 mod ast;
 mod token;
@@ -52,7 +51,7 @@ fn main() -> Result<()> {
     let mut reader = FileReader::open(&input_path)?;
 
     let mut token_writer = TokenWriter::open(token_output_path)?;
-    let mut ast_writer = AstWriter::open(ast_output_path)?;
+    let mut ast_writer = XmlWriter::open(ast_output_path)?;
 
     let tokens = Tokens::from_reader(reader.reader())
         .map(|res| res.map_err(|e| Error::ReadToken(input_path.to_owned(), e.into())))

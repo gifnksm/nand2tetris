@@ -1,29 +1,29 @@
-use crate::Ident;
+use crate::{Ident, WithLoc};
 pub use parser::*;
 
 mod parser;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub struct Class {
-    pub name: Ident,
-    pub vars: Vec<ClassVar>,
-    pub subs: Vec<Subroutine>,
+    pub name: WithLoc<Ident>,
+    pub vars: Vec<WithLoc<ClassVar>>,
+    pub subs: Vec<WithLoc<Subroutine>>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub struct ClassVar {
-    pub kind: ClassVarKind,
-    pub ty: Type,
-    pub var_names: Vec<Ident>,
+    pub kind: WithLoc<ClassVarKind>,
+    pub ty: WithLoc<Type>,
+    pub var_names: Vec<WithLoc<Ident>>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub enum ClassVarKind {
     Static,
     Field,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub enum Type {
     Int,
     Char,
@@ -31,104 +31,113 @@ pub enum Type {
     Class(Ident),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub struct Subroutine {
-    pub kind: SubroutineKind,
-    pub return_type: Option<Type>,
-    pub name: Ident,
-    pub params: Vec<Parameter>,
-    pub body: SubroutineBody,
+    pub kind: WithLoc<SubroutineKind>,
+    pub return_type: Option<WithLoc<Type>>,
+    pub name: WithLoc<Ident>,
+    pub params: WithLoc<ParameterList>,
+    pub body: WithLoc<SubroutineBody>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub enum SubroutineKind {
     Constructor,
     Function,
     Method,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
+pub struct ParameterList(pub Vec<WithLoc<Parameter>>);
+
+#[derive(Debug, Clone)]
 pub struct Parameter {
-    pub ty: Type,
-    pub var_name: Ident,
+    pub ty: WithLoc<Type>,
+    pub var_name: WithLoc<Ident>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub struct SubroutineBody {
-    pub vars: Vec<Var>,
-    pub stmts: Vec<Statement>,
+    pub vars: Vec<WithLoc<Var>>,
+    pub stmts: WithLoc<StatementList>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub struct Var {
-    pub ty: Type,
-    pub names: Vec<Ident>,
+    pub ty: WithLoc<Type>,
+    pub names: Vec<WithLoc<Ident>>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
+pub struct StatementList(pub Vec<WithLoc<Statement>>);
+
+#[derive(Debug, Clone)]
 pub enum Statement {
-    Let(LetStatement),
-    If(IfStatement),
-    While(WhileStatement),
-    Do(DoStatement),
-    Return(ReturnStatement),
+    Let(WithLoc<LetStatement>),
+    If(WithLoc<IfStatement>),
+    While(WithLoc<WhileStatement>),
+    Do(WithLoc<DoStatement>),
+    Return(WithLoc<ReturnStatement>),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub struct LetStatement {
-    pub var_name: Ident,
-    pub index: Option<Expression>,
-    pub expr: Expression,
+    pub var_name: WithLoc<Ident>,
+    pub index: Option<WithLoc<Expression>>,
+    pub expr: WithLoc<Expression>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub struct IfStatement {
-    pub cond: Expression,
-    pub then_stmts: Vec<Statement>,
-    pub else_stmts: Option<Vec<Statement>>,
+    pub cond: WithLoc<Expression>,
+    pub then_stmts: WithLoc<StatementList>,
+    pub else_stmts: Option<WithLoc<StatementList>>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub struct WhileStatement {
-    pub cond: Expression,
-    pub stmts: Vec<Statement>,
+    pub cond: WithLoc<Expression>,
+    pub stmts: WithLoc<StatementList>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub struct DoStatement {
-    pub sub_call: SubroutineCall,
+    pub sub_call: WithLoc<SubroutineCall>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub struct ReturnStatement {
-    pub expr: Option<Expression>,
+    pub expr: Option<WithLoc<Expression>>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub struct Expression {
-    pub term: Term,
-    pub binary_ops: Vec<(BinaryOp, Term)>,
+    pub term: WithLoc<Term>,
+    pub binary_ops: Vec<(WithLoc<BinaryOp>, WithLoc<Term>)>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub enum Term {
-    IntConstant(u16),
-    StringConstant(String),
-    KeywordConstant(KeywordConstant),
-    Variable(Ident),
-    Index(Ident, Box<Expression>),
-    SubroutineCall(SubroutineCall),
-    Expression(Box<Expression>),
-    UnaryOp(UnaryOp, Box<Term>),
+    IntConstant(WithLoc<u16>),
+    StringConstant(WithLoc<String>),
+    KeywordConstant(WithLoc<KeywordConstant>),
+    Variable(WithLoc<Ident>),
+    Index(WithLoc<Ident>, Box<WithLoc<Expression>>),
+    SubroutineCall(WithLoc<SubroutineCall>),
+    Expression(Box<WithLoc<Expression>>),
+    UnaryOp(WithLoc<UnaryOp>, Box<WithLoc<Term>>),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub enum SubroutineCall {
-    SubroutineCall(Ident, Vec<Expression>),
-    PropertyCall(Ident, Ident, Vec<Expression>),
+    SubroutineCall(WithLoc<Ident>, WithLoc<ExpressionList>),
+    PropertyCall(WithLoc<Ident>, WithLoc<Ident>, WithLoc<ExpressionList>),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
+pub struct ExpressionList(pub Vec<WithLoc<Expression>>);
+
+#[derive(Debug, Clone)]
 pub enum BinaryOp {
     Add,
     Sub,
@@ -141,13 +150,13 @@ pub enum BinaryOp {
     Eq,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub enum UnaryOp {
     Neg,
     Not,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub enum KeywordConstant {
     True,
     False,
