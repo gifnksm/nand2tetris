@@ -1,4 +1,5 @@
 use std::{
+    ffi::OsStr,
     fs::File,
     io::{self, BufReader, BufWriter},
     path::PathBuf,
@@ -8,27 +9,32 @@ use thiserror::Error;
 
 #[derive(Debug)]
 pub struct FileReader {
+    path: PathBuf,
     file: BufReader<File>,
 }
 
 #[derive(Debug, Error)]
 pub enum FileReaderOpenError {
     #[error("failed to open file: {}", _0.display())]
-    OpenInDir(PathBuf, #[source] io::Error),
+    Open(PathBuf, #[source] io::Error),
 }
 
 impl FileReader {
     pub fn open(path: impl Into<PathBuf>) -> Result<Self, FileReaderOpenError> {
         let path = path.into();
-        let file =
-            File::open(&path).map_err(|e| FileReaderOpenError::OpenInDir(path.clone(), e))?;
+        let file = File::open(&path).map_err(|e| FileReaderOpenError::Open(path.clone(), e))?;
         Ok(FileReader {
+            path,
             file: BufReader::new(file),
         })
     }
 
     pub fn reader(&mut self) -> &mut BufReader<File> {
         &mut self.file
+    }
+
+    pub fn into_parts(self) -> (PathBuf, BufReader<File>) {
+        (self.path, self.file)
     }
 }
 
@@ -84,5 +90,55 @@ impl FileWriter {
 
     pub fn writer(&mut self) -> &mut BufWriter<NamedTempFile> {
         &mut self.writer
+    }
+}
+
+#[derive(Debug)]
+pub struct DirOrFileReader {
+    paths: std::vec::IntoIter<PathBuf>,
+}
+
+#[derive(Debug, Error)]
+pub enum DirOrFileReaderOpenError {
+    #[error("failed to read directory: {}", _0.display())]
+    ReadDir(PathBuf, #[source] io::Error),
+    #[error("failed to read directory entry: {}", _0.display())]
+    ReadDirEntry(PathBuf, #[source] io::Error),
+}
+
+impl DirOrFileReader {
+    pub fn open(
+        path: impl Into<PathBuf>,
+        extension: impl AsRef<OsStr>,
+    ) -> Result<Self, DirOrFileReaderOpenError> {
+        let path = path.into();
+        let paths = if path.is_dir() {
+            path.read_dir()
+                .map_err(|e| DirOrFileReaderOpenError::ReadDir(path.clone(), e))?
+                .filter_map(|entry| {
+                    entry
+                        .map_err(|e| DirOrFileReaderOpenError::ReadDirEntry(path.clone(), e))
+                        .map(|entry| {
+                            let path = entry.path();
+                            (path.is_file() && path.extension() == Some(extension.as_ref()))
+                                .then(|| path)
+                        })
+                        .transpose()
+                })
+                .collect::<Result<_, _>>()?
+        } else {
+            vec![path]
+        }
+        .into_iter();
+        Ok(Self { paths })
+    }
+}
+
+impl Iterator for DirOrFileReader {
+    type Item = Result<FileReader, FileReaderOpenError>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let path = self.paths.next()?;
+        Some(FileReader::open(path))
     }
 }

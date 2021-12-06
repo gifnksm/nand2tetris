@@ -1,16 +1,18 @@
 use super::Executable;
 use crate::ParseModuleError;
 use crate::{Command, FuncName, Module, ModuleName, ParseModuleErrorKind};
-use std::io;
+use std::io::{self, BufRead};
 use std::{collections::BTreeMap, path::PathBuf};
 use thiserror::Error;
 
 impl Executable {
-    pub fn open(module_paths: &[PathBuf]) -> Result<Self, ParseExecutableError> {
+    pub fn from_readers(
+        modules: impl IntoIterator<Item = (PathBuf, impl BufRead)>,
+    ) -> Result<Self, ParseExecutableError> {
         let mut functions = FunctionTable::new();
-        let modules = module_paths
-            .iter()
-            .map(|path| Module::open(path, &mut functions))
+        let modules = modules
+            .into_iter()
+            .map(|(path, reader)| Module::from_reader(path, reader, &mut functions))
             .collect::<Result<Vec<_>, _>>()?;
         if modules.is_empty() {
             return Err(ParseExecutableError::NoModules);

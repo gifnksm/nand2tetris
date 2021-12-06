@@ -1,22 +1,33 @@
 use color_eyre::eyre::{ensure, Context, Result};
-use common::fs::FileWriter;
+use common::{
+    fs::{DirOrFileReader, FileWriter},
+    iter::TryIterator,
+};
 use std::{env, io::prelude::*, path::PathBuf};
 use vm::{asm::Statement, Executable};
 
 #[derive(Debug)]
 struct Params {
-    input_paths: Vec<PathBuf>,
+    input_path: PathBuf,
     output_path: PathBuf,
 }
 
 fn main() -> Result<()> {
     color_eyre::install()?;
     let Params {
-        input_paths,
+        input_path,
         output_path,
     } = parse_args()?;
 
-    let exec = Executable::open(&input_paths).wrap_err("failed to open executable")?;
+    let files = DirOrFileReader::open(&input_path, "vm")
+        .wrap_err_with(|| format!("failed to open input file: {}", input_path.display()))?;
+
+    let input_modules = files
+        .map_ok(|file| file.into_parts())
+        .collect::<Result<Vec<_>, _>>()
+        .wrap_err_with(|| format!("failed to open input file: {}", input_path.display()))?;
+
+    let exec = Executable::from_readers(input_modules).wrap_err("failed to open executable")?;
     let stmts = exec.translate();
 
     let mut writer = FileWriter::open(&output_path)
@@ -52,28 +63,8 @@ fn create_params(input_path: PathBuf, output_path: Option<PathBuf>) -> Result<Pa
         }
     });
 
-    let input_paths = if input_path.is_dir() {
-        input_path
-            .read_dir()
-            .wrap_err_with(|| format!("failed to read directory: {}", input_path.display()))?
-            .filter_map(|entry| {
-                entry
-                    .wrap_err_with(|| {
-                        format!("failed to read directory entry: {}", input_path.display())
-                    })
-                    .map(|entry| {
-                        let path = entry.path();
-                        (path.is_file() && path.extension() == Some("vm".as_ref())).then(|| path)
-                    })
-                    .transpose()
-            })
-            .collect::<Result<_>>()?
-    } else {
-        vec![input_path]
-    };
-
     Ok(Params {
-        input_paths,
+        input_path,
         output_path,
     })
 }

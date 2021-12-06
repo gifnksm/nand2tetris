@@ -13,11 +13,18 @@ use thiserror::Error;
 
 impl Module {
     pub(crate) fn from_reader(
-        name: ModuleName,
         path: PathBuf,
         mut reader: impl BufRead,
         functions: &mut FunctionTable,
     ) -> Result<Self, ParseExecutableError> {
+        let name = path
+            .with_extension("")
+            .file_name()
+            .and_then(|s| s.to_str())
+            .map(|s| s.to_owned())
+            .ok_or_else(|| ParseExecutableError::InvalidModulePath(path.clone()))?;
+        let name = ModuleName::from_str(&name)?;
+
         let mut parser = Parser::new(&path, &name, functions);
         let mut line_buf = String::new();
         for line in 1.. {
@@ -295,7 +302,6 @@ mod test {
     fn parse_label() {
         fn p(input: &[&str]) -> Result<Module, ParseExecutableError> {
             Module::from_reader(
-                ModuleName::from_str("foo").unwrap(),
                 "foo.vm".into(),
                 BufReader::new(input.join("\n").into_bytes().as_slice()),
                 &mut FunctionTable::new(),

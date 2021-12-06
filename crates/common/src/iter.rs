@@ -66,10 +66,10 @@ pub trait TryIterator<T, E1>: Iterator<Item = Result<T, E1>> {
         MapOk { iter: self, f }
     }
 
-    fn try_map_ok<E2, F>(self, f: F) -> TryMapOk<Self, F>
+    fn try_map_ok<U, E2, F>(self, f: F) -> TryMapOk<Self, F>
     where
         Self: Sized,
-        F: FnMut(T) -> Result<T, E2>,
+        F: FnMut(T) -> Result<U, E2>,
     {
         TryMapOk { iter: self, f }
     }
@@ -120,12 +120,12 @@ pub struct TryMapOk<I, F> {
     f: F,
 }
 
-impl<I, F, T, E1, E2> Iterator for TryMapOk<I, F>
+impl<I, F, T, U, E1, E2> Iterator for TryMapOk<I, F>
 where
     I: Iterator<Item = Result<T, E1>>,
-    F: FnMut(T) -> Result<T, E2>,
+    F: FnMut(T) -> Result<U, E2>,
 {
-    type Item = Result<T, Either<E1, E2>>;
+    type Item = Result<U, Either<E1, E2>>;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.iter.next().map(|res| match res {
