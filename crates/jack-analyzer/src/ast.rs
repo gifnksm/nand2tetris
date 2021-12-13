@@ -1,10 +1,10 @@
 use crate::xml::{WriteXml, XmlWriter};
-use jack::*;
+use jack::{ast::*, token::*};
 use std::io;
 
 impl WriteXml for Class {
     fn write_xml(&self, indent: usize, writer: &mut XmlWriter) -> io::Result<()> {
-        writer.write_multi(indent, "class", |writer, indent| {
+        writer.write_multi(indent, "class", |indent, writer| {
             Keyword::Class.write_xml(indent, writer)?;
             self.name.write_xml(indent, writer)?;
             Symbol::OpenBrace.write_xml(indent, writer)?;
@@ -20,12 +20,12 @@ impl WriteXml for Class {
     }
 }
 
-impl WriteXml for ClassVar {
+impl WriteXml for ClassVarDec {
     fn write_xml(&self, indent: usize, writer: &mut XmlWriter) -> io::Result<()> {
-        writer.write_multi(indent, "classVarDec", |writer, indent| {
+        writer.write_multi(indent, "classVarDec", |indent, writer| {
             self.kind.write_xml(indent, writer)?;
             self.ty.write_xml(indent, writer)?;
-            for (i, var_name) in self.var_names.iter().enumerate() {
+            for (i, var_name) in self.names.iter().enumerate() {
                 if i > 0 {
                     Symbol::Comma.write_xml(indent, writer)?;
                 }
@@ -59,15 +59,20 @@ impl WriteXml for Type {
     }
 }
 
+impl WriteXml for ReturnType {
+    fn write_xml(&self, indent: usize, writer: &mut XmlWriter) -> io::Result<()> {
+        match self {
+            ReturnType::Void => Keyword::Void.write_xml(indent, writer),
+            ReturnType::Type(ty) => ty.write_xml(indent, writer),
+        }
+    }
+}
+
 impl WriteXml for Subroutine {
     fn write_xml(&self, indent: usize, writer: &mut XmlWriter) -> io::Result<()> {
-        writer.write_multi(indent, "subroutineDec", |writer, indent| {
+        writer.write_multi(indent, "subroutineDec", |indent, writer| {
             self.kind.write_xml(indent, writer)?;
-            if let Some(ty) = &self.return_type {
-                ty.write_xml(indent, writer)?;
-            } else {
-                Keyword::Void.write_xml(indent, writer)?;
-            }
+            self.return_type.write_xml(indent, writer)?;
             self.name.write_xml(indent, writer)?;
             Symbol::OpenParen.write_xml(indent, writer)?;
             self.params.write_xml(indent, writer)?;
@@ -91,29 +96,21 @@ impl WriteXml for SubroutineKind {
 
 impl WriteXml for ParameterList {
     fn write_xml(&self, indent: usize, writer: &mut XmlWriter) -> io::Result<()> {
-        writer.write_multi(indent, "parameterList", |writer, indent| {
-            for (i, param) in self.0.iter().enumerate() {
-                if i > 0 {
-                    Symbol::Comma.write_xml(indent, writer)?;
-                }
-                param.write_xml(indent, writer)?;
-            }
-            Ok(())
-        })
+        writer.write_list_with_sep(indent, "parameterList", &self.0, Symbol::Comma)
     }
 }
 
 impl WriteXml for Parameter {
     fn write_xml(&self, indent: usize, writer: &mut XmlWriter) -> io::Result<()> {
         self.ty.write_xml(indent, writer)?;
-        self.var_name.write_xml(indent, writer)?;
+        self.name.write_xml(indent, writer)?;
         Ok(())
     }
 }
 
 impl WriteXml for SubroutineBody {
     fn write_xml(&self, indent: usize, writer: &mut XmlWriter) -> io::Result<()> {
-        writer.write_multi(indent, "subroutineBody", |writer, indent| {
+        writer.write_multi(indent, "subroutineBody", |indent, writer| {
             Symbol::OpenBrace.write_xml(indent, writer)?;
             for var in &self.vars {
                 var.write_xml(indent, writer)?;
@@ -125,9 +122,9 @@ impl WriteXml for SubroutineBody {
     }
 }
 
-impl WriteXml for Var {
+impl WriteXml for LocalVarDec {
     fn write_xml(&self, indent: usize, writer: &mut XmlWriter) -> io::Result<()> {
-        writer.write_multi(indent, "varDec", |writer, indent| {
+        writer.write_multi(indent, "varDec", |indent, writer| {
             Keyword::Var.write_xml(indent, writer)?;
             self.ty.write_xml(indent, writer)?;
             for (i, var_name) in self.names.iter().enumerate() {
@@ -144,12 +141,7 @@ impl WriteXml for Var {
 
 impl WriteXml for StatementList {
     fn write_xml(&self, indent: usize, writer: &mut XmlWriter) -> io::Result<()> {
-        writer.write_multi(indent, "statements", |writer, indent| {
-            for stmt in &self.0 {
-                stmt.write_xml(indent, writer)?;
-            }
-            Ok(())
-        })
+        writer.write_list(indent, "statements", &self.0)
     }
 }
 
@@ -167,10 +159,10 @@ impl WriteXml for Statement {
 
 impl WriteXml for LetStatement {
     fn write_xml(&self, indent: usize, writer: &mut XmlWriter) -> io::Result<()> {
-        writer.write_multi(indent, "letStatement", |writer, indent| {
+        writer.write_multi(indent, "letStatement", |indent, writer| {
             Keyword::Let.write_xml(indent, writer)?;
-            self.var_name.write_xml(indent, writer)?;
-            if let Some(index) = &self.index {
+            self.target.write_xml(indent, writer)?;
+            if let Some(index) = &self.target_index {
                 Symbol::OpenBracket.write_xml(indent, writer)?;
                 index.write_xml(indent, writer)?;
                 Symbol::CloseBracket.write_xml(indent, writer)?;
@@ -185,7 +177,7 @@ impl WriteXml for LetStatement {
 
 impl WriteXml for IfStatement {
     fn write_xml(&self, indent: usize, writer: &mut XmlWriter) -> io::Result<()> {
-        writer.write_multi(indent, "ifStatement", |writer, indent| {
+        writer.write_multi(indent, "ifStatement", |indent, writer| {
             Keyword::If.write_xml(indent, writer)?;
             Symbol::OpenParen.write_xml(indent, writer)?;
             self.cond.write_xml(indent, writer)?;
@@ -206,7 +198,7 @@ impl WriteXml for IfStatement {
 
 impl WriteXml for WhileStatement {
     fn write_xml(&self, indent: usize, writer: &mut XmlWriter) -> io::Result<()> {
-        writer.write_multi(indent, "whileStatement", |writer, indent| {
+        writer.write_multi(indent, "whileStatement", |indent, writer| {
             Keyword::While.write_xml(indent, writer)?;
             Symbol::OpenParen.write_xml(indent, writer)?;
             self.cond.write_xml(indent, writer)?;
@@ -221,10 +213,10 @@ impl WriteXml for WhileStatement {
 
 impl WriteXml for DoStatement {
     fn write_xml(&self, indent: usize, writer: &mut XmlWriter) -> io::Result<()> {
-        writer.write_multi(indent, "doStatement", |write, indent| {
-            Keyword::Do.write_xml(indent, write)?;
-            self.sub_call.write_xml(indent, write)?;
-            Symbol::Semicolon.write_xml(indent, write)?;
+        writer.write_multi(indent, "doStatement", |indent, writer| {
+            Keyword::Do.write_xml(indent, writer)?;
+            self.sub_call.write_xml(indent, writer)?;
+            Symbol::Semicolon.write_xml(indent, writer)?;
             Ok(())
         })
     }
@@ -232,7 +224,7 @@ impl WriteXml for DoStatement {
 
 impl WriteXml for ReturnStatement {
     fn write_xml(&self, indent: usize, writer: &mut XmlWriter) -> io::Result<()> {
-        writer.write_multi(indent, "returnStatement", |writer, indent| {
+        writer.write_multi(indent, "returnStatement", |indent, writer| {
             Keyword::Return.write_xml(indent, writer)?;
             if let Some(expr) = &self.expr {
                 expr.write_xml(indent, writer)?;
@@ -245,11 +237,11 @@ impl WriteXml for ReturnStatement {
 
 impl WriteXml for Expression {
     fn write_xml(&self, indent: usize, writer: &mut XmlWriter) -> io::Result<()> {
-        writer.write_multi(indent, "expression", |this, indent| {
-            self.term.write_xml(indent, this)?;
+        writer.write_multi(indent, "expression", |indent, writer| {
+            self.term.write_xml(indent, writer)?;
             for (op, term) in &self.binary_ops {
-                op.write_xml(indent, this)?;
-                term.write_xml(indent, this)?;
+                op.write_xml(indent, writer)?;
+                term.write_xml(indent, writer)?;
             }
             Ok(())
         })?;
@@ -259,7 +251,7 @@ impl WriteXml for Expression {
 
 impl WriteXml for Term {
     fn write_xml(&self, indent: usize, writer: &mut XmlWriter) -> io::Result<()> {
-        writer.write_multi(indent, "term", |writer, indent| match self {
+        writer.write_multi(indent, "term", |indent, writer| match self {
             Term::IntConstant(n) => n.write_xml(indent, writer),
             Term::StringConstant(s) => s.write_xml(indent, writer),
             Term::KeywordConstant(k) => k.write_xml(indent, writer),
@@ -312,7 +304,7 @@ impl WriteXml for SubroutineCall {
 
 impl WriteXml for ExpressionList {
     fn write_xml(&self, indent: usize, writer: &mut XmlWriter) -> io::Result<()> {
-        writer.write_multi(indent, "expressionList", |writer, indent| {
+        writer.write_multi(indent, "expressionList", |indent, writer| {
             for (i, expr) in self.0.iter().enumerate() {
                 if i > 0 {
                     Symbol::Comma.write_xml(indent, writer)?;

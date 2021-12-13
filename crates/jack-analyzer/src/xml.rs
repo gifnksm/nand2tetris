@@ -1,6 +1,6 @@
 use crate::Error;
 use common::fs::FileWriter;
-use jack::WithLoc;
+use jack::token::WithLoc;
 use std::{
     fmt,
     io::{self, prelude::*},
@@ -91,10 +91,10 @@ impl XmlWriter {
         &mut self,
         indent: usize,
         tag: &str,
-        mut f: impl FnMut(&mut Self, usize) -> io::Result<()>,
+        mut f: impl FnMut(usize, &mut Self) -> io::Result<()>,
     ) -> io::Result<()> {
         self.write_open(indent, tag)?;
-        f(self, indent + 1)?;
+        f(indent + 1, self)?;
         self.write_close(indent, tag)?;
         Ok(())
     }
@@ -109,6 +109,59 @@ impl XmlWriter {
             indent = indent * 2
         )?;
         Ok(())
+    }
+
+    pub(crate) fn write_labeled(
+        &mut self,
+        indent: usize,
+        tag: &str,
+        item: &impl WriteXml,
+    ) -> io::Result<()> {
+        self.write_multi(indent, tag, |indent, writer| item.write_xml(indent, writer))
+    }
+
+    pub(crate) fn write_opt(
+        &mut self,
+        indent: usize,
+        tag: &str,
+        item: &Option<impl WriteXml>,
+    ) -> io::Result<()> {
+        if let Some(item) = item {
+            self.write_multi(indent, tag, |indent, writer| item.write_xml(indent, writer))?;
+        }
+        Ok(())
+    }
+
+    pub(crate) fn write_list(
+        &mut self,
+        indent: usize,
+        tag: &str,
+        list: &[impl WriteXml],
+    ) -> io::Result<()> {
+        self.write_multi(indent, tag, |indent, writer| {
+            for item in list {
+                item.write_xml(indent, writer)?;
+            }
+            Ok(())
+        })
+    }
+
+    pub(crate) fn write_list_with_sep(
+        &mut self,
+        indent: usize,
+        tag: &str,
+        list: &[impl WriteXml],
+        sep: impl WriteXml,
+    ) -> io::Result<()> {
+        self.write_multi(indent, tag, |indent, writer| {
+            for (i, item) in list.iter().enumerate() {
+                if i > 0 {
+                    sep.write_xml(indent, writer)?;
+                }
+                item.write_xml(indent, writer)?;
+            }
+            Ok(())
+        })
     }
 }
 

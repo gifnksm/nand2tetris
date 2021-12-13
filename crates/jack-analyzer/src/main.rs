@@ -1,16 +1,21 @@
 use crate::xml::XmlWriter;
 use color_eyre::eyre::{ensure, Result};
 use common::{
-    fs::FileReader,
+    fs::DirOrFileReader,
     iter::{IteratorExt, TryIterator},
 };
-use jack::{Class, FromTokens, Tokens};
+use jack::{
+    ast::{Class, FromTokens, ResolveError},
+    symbol_table::GlobalSymbolTable,
+    token::Tokens,
+};
 use std::{env, path::PathBuf};
 use thiserror::Error;
 use token::TokenWriter;
 
 mod ast;
 mod token;
+mod typed_ast;
 mod xml;
 
 #[derive(Debug, Error)]
@@ -23,12 +28,16 @@ pub enum Error {
     ReadToken(PathBuf, #[source] StdError),
     #[error("failed to parse file: {}", _0.display())]
     Parse(PathBuf, #[source] StdError),
+    #[error("failed to register symbols from file: {}", _0.display())]
+    ExtendSymbolTable(PathBuf, #[source] StdError),
     #[error("failed to write token to file: {}", _0.display())]
     WriteToken(PathBuf, #[source] StdError),
     #[error("failed to write AST to file: {}", _0.display())]
     WriteAst(PathBuf, #[source] StdError),
     #[error("failed to persist output file: {}", _0.display())]
     PersistOutputFile(PathBuf, #[source] StdError),
+    #[error("failed to resolve symbols in file: {}", _0.display())]
+    Resolve(PathBuf, #[source] ResolveError),
 }
 
 type StdError = Box<dyn std::error::Error + Send + Sync + 'static>;
@@ -36,33 +45,61 @@ type StdError = Box<dyn std::error::Error + Send + Sync + 'static>;
 #[derive(Debug)]
 struct Params {
     input_path: PathBuf,
-    token_output_path: PathBuf,
-    ast_output_path: PathBuf,
 }
 
 fn main() -> Result<()> {
     color_eyre::install()?;
-    let Params {
-        input_path,
-        token_output_path,
-        ast_output_path,
-    } = parse_args()?;
+    let Params { input_path } = parse_args()?;
 
-    let mut reader = FileReader::open(&input_path)?;
+    let mut symbol_table = GlobalSymbolTable::with_builtin();
+    let mut asts = vec![];
+    let mut token_writers = vec![];
+    let mut xml_writers = vec![];
 
-    let mut token_writer = TokenWriter::open(token_output_path)?;
-    let mut ast_writer = XmlWriter::open(ast_output_path)?;
+    DirOrFileReader::open(&input_path, "jack")?.try_for_each(|reader| {
+        let (input_path, reader) = reader
+            .map_err(|e| Error::OpenInputFile(input_path.clone(), e.into()))?
+            .into_parts();
+        let token_output_path = input_path.with_extension("token.xml");
+        let ast_output_path = input_path.with_extension("ast.xml");
 
-    let tokens = Tokens::from_reader(reader.reader())
-        .map(|res| res.map_err(|e| Error::ReadToken(input_path.to_owned(), e.into())))
-        .try_inspect_ok(|token| token_writer.write(&token.data));
+        let mut token_writer = TokenWriter::open(token_output_path)?;
+        let mut ast_writer = XmlWriter::open(ast_output_path)?;
 
-    let ast = Class::from_tokens(&mut tokens.prependable())
-        .map_err(|e| Error::Parse(input_path.to_owned(), e.into()))?;
-    ast_writer.write(&ast)?;
+        let tokens = Tokens::from_reader(reader)
+            .map(|res| res.map_err(|e| Error::ReadToken(input_path.to_owned(), e.into())))
+            .try_inspect_ok(|token| token_writer.write(&token.data));
 
-    token_writer.persist()?;
-    ast_writer.persist()?;
+        let ast = Class::from_tokens(&mut tokens.prependable())
+            .map_err(|e| Error::Parse(input_path.to_owned(), e.into()))?;
+        ast_writer.write(&ast)?;
+
+        symbol_table
+            .extend_with_class(&input_path, &ast.data)
+            .map_err(|e| Error::ExtendSymbolTable(input_path.to_owned(), e.into()))?;
+
+        asts.push((input_path, ast));
+        token_writers.push(token_writer);
+        xml_writers.push(ast_writer);
+        Ok::<(), Error>(())
+    })?;
+
+    for (input_path, ast) in asts {
+        let typed_ast_output_path = input_path.with_extension("typed-ast.xml");
+        let mut typed_ast_writer = XmlWriter::open(&typed_ast_output_path)?;
+        let typed_ast = ast
+            .resolve(&symbol_table)
+            .map_err(|e| Error::Resolve(input_path, e))?;
+        typed_ast_writer.write(&typed_ast)?;
+        xml_writers.push(typed_ast_writer);
+    }
+
+    for token_writer in token_writers {
+        token_writer.persist()?;
+    }
+    for xml_writer in xml_writers {
+        xml_writer.persist()?;
+    }
 
     Ok(())
 }
@@ -70,14 +107,6 @@ fn main() -> Result<()> {
 fn parse_args() -> Result<Params> {
     let args = env::args().collect::<Vec<_>>();
     ensure!(args.len() == 2, "Usage: {} <file>", args[0]);
-
     let input_path = PathBuf::from(&args[1]);
-    let token_output_path = input_path.with_extension("token.xml");
-    let ast_output_path = input_path.with_extension("ast.xml");
-
-    Ok(Params {
-        input_path,
-        token_output_path,
-        ast_output_path,
-    })
+    Ok(Params { input_path })
 }

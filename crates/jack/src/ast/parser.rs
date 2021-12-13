@@ -1,6 +1,6 @@
 use self::private::FromTokensImpl;
 use super::*;
-use crate::{Keyword, Location, Symbol, Token, WithLoc};
+use crate::token::{Keyword, Location, Symbol, Token, WithLoc};
 use common::iter::Prependable;
 use std::error::Error as StdError;
 use thiserror::Error;
@@ -44,7 +44,6 @@ trait TokensExt<E> {
     fn ident(&mut self) -> Result<WithLoc<Ident>, ParseError<E>>;
     fn try_int(&mut self) -> Result<Option<WithLoc<u16>>, ParseError<E>>;
     fn try_string(&mut self) -> Result<Option<WithLoc<String>>, ParseError<E>>;
-    fn void_or_type(&mut self) -> Result<Option<WithLoc<Type>>, ParseError<E>>;
     fn repeat_opt<F, T>(&mut self, f: F) -> Result<Vec<WithLoc<T>>, ParseError<E>>
     where
         F: FnMut(&mut Self) -> Result<Option<WithLoc<T>>, ParseError<E>>;
@@ -148,16 +147,6 @@ where
             Token::String(s) => Ok(s),
             token => Err(token),
         })
-    }
-
-    fn void_or_type(&mut self) -> Result<Option<WithLoc<Type>>, ParseError<E>> {
-        if self.try_keyword(Keyword::Void)?.is_some() {
-            return Ok(None);
-        }
-        if let Some(ty) = Type::try_from_tokens(self)? {
-            return Ok(Some(ty));
-        }
-        Err(expected("type of `void`", self.token()?))
     }
 
     fn repeat_opt<F, T>(&mut self, mut f: F) -> Result<Vec<WithLoc<T>>, ParseError<E>>
@@ -277,7 +266,7 @@ impl FromTokensImpl for Class {
         tokens.keyword(Keyword::Class)?;
         let name = tokens.ident()?;
         tokens.symbol(Symbol::OpenBrace)?;
-        let vars = tokens.repeat_opt(ClassVar::try_from_tokens)?;
+        let vars = tokens.repeat_opt(ClassVarDec::try_from_tokens)?;
         let subs = tokens.repeat_opt(Subroutine::try_from_tokens)?;
         tokens.symbol(Symbol::CloseBrace)?;
         Ok(Self { name, vars, subs })
@@ -285,7 +274,7 @@ impl FromTokensImpl for Class {
 }
 impl FromTokens for Class {}
 
-impl FromTokensImpl for ClassVar {
+impl FromTokensImpl for ClassVarDec {
     fn context() -> Option<String> {
         Some("class variable declaration".into())
     }
@@ -301,16 +290,12 @@ impl FromTokensImpl for ClassVar {
     {
         let kind = ClassVarKind::from_tokens(tokens)?;
         let ty = Type::from_tokens(tokens)?;
-        let var_names = tokens.comma_separated(|tokens| tokens.ident())?;
+        let names = tokens.comma_separated(|tokens| tokens.ident())?;
         tokens.symbol(Symbol::Semicolon)?;
-        Ok(Self {
-            kind,
-            ty,
-            var_names,
-        })
+        Ok(Self { kind, ty, names })
     }
 }
-impl FromTokens for ClassVar {}
+impl FromTokens for ClassVarDec {}
 
 impl FromTokensImpl for ClassVarKind {
     fn is_start_token(token: &Token) -> bool {
@@ -361,6 +346,24 @@ impl FromTokens for Type {
     }
 }
 
+impl FromTokensImpl for ReturnType {
+    fn is_start_token(token: &Token) -> bool {
+        matches!(token, Token::Keyword(Keyword::Void)) || Type::is_start_token(token)
+    }
+
+    fn from_tokens_impl<I, E>(tokens: &mut Prependable<I>) -> Result<Self, ParseError<E>>
+    where
+        I: Iterator<Item = Result<WithLoc<Token>, E>>,
+        E: StdError + Send + Sync + 'static,
+    {
+        if tokens.try_keyword(Keyword::Void)?.is_some() {
+            return Ok(Self::Void);
+        }
+        Ok(Self::Type(Type::from_tokens(tokens)?))
+    }
+}
+impl FromTokens for ReturnType {}
+
 impl FromTokensImpl for Subroutine {
     fn context() -> Option<String> {
         Some("subroutine declaration".into())
@@ -377,7 +380,7 @@ impl FromTokensImpl for Subroutine {
         E: StdError + Send + Sync + 'static,
     {
         let kind = SubroutineKind::from_tokens(tokens)?;
-        let return_type = tokens.void_or_type()?;
+        let return_type = ReturnType::from_tokens(tokens)?;
         let name = tokens.ident()?;
         tokens.symbol(Symbol::OpenParen)?;
         let params = ParameterList::from_tokens(tokens)?;
@@ -450,8 +453,8 @@ impl FromTokensImpl for Parameter {
         E: StdError + Send + Sync + 'static,
     {
         let ty = Type::from_tokens(tokens)?;
-        let var_name = tokens.ident()?;
-        Ok(Self { ty, var_name })
+        let name = tokens.ident()?;
+        Ok(Self { ty, name })
     }
 }
 impl FromTokens for Parameter {}
@@ -472,7 +475,7 @@ impl FromTokensImpl for SubroutineBody {
         E: StdError + Send + Sync + 'static,
     {
         tokens.symbol(Symbol::OpenBrace)?;
-        let vars = tokens.repeat_opt(Var::try_from_tokens)?;
+        let vars = tokens.repeat_opt(LocalVarDec::try_from_tokens)?;
         let stmts = StatementList::from_tokens(tokens)?;
         tokens.symbol(Symbol::CloseBrace)?;
         Ok(Self { vars, stmts })
@@ -480,7 +483,7 @@ impl FromTokensImpl for SubroutineBody {
 }
 impl FromTokens for SubroutineBody {}
 
-impl FromTokensImpl for Var {
+impl FromTokensImpl for LocalVarDec {
     fn context() -> Option<String> {
         Some("variable declaration".into())
     }
@@ -502,7 +505,7 @@ impl FromTokensImpl for Var {
         Ok(Self { ty, names })
     }
 }
-impl FromTokens for Var {}
+impl FromTokens for LocalVarDec {}
 
 impl FromTokensImpl for StatementList {
     fn is_start_token(token: &Token) -> bool {
@@ -571,18 +574,18 @@ impl FromTokensImpl for LetStatement {
         E: StdError + Send + Sync + 'static,
     {
         tokens.keyword(Keyword::Let)?;
-        let var_name = tokens.ident()?;
-        let mut index = None;
+        let target = tokens.ident()?;
+        let mut target_index = None;
         if tokens.try_symbol(Symbol::OpenBracket)?.is_some() {
-            index = Some(Expression::from_tokens(tokens)?);
+            target_index = Some(Expression::from_tokens(tokens)?);
             tokens.symbol(Symbol::CloseBracket)?;
         }
         tokens.symbol(Symbol::Equal)?;
         let expr = Expression::from_tokens(tokens)?;
         tokens.symbol(Symbol::Semicolon)?;
         Ok(Self {
-            var_name,
-            index,
+            target,
+            target_index,
             expr,
         })
     }

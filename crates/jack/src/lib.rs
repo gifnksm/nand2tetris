@@ -1,5 +1,4 @@
-pub use ast::*;
-pub use token::*;
-
-mod ast;
-mod token;
+pub mod ast;
+pub mod symbol_table;
+pub mod token;
+pub mod typed_ast;

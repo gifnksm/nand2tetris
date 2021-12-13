@@ -2,7 +2,7 @@ use crate::{
     xml::{WriteXml, XmlWriter},
     Error,
 };
-use jack::{Ident, Keyword, Symbol, Token};
+use jack::token::{Ident, Keyword, Symbol, Token};
 use std::{io, path::PathBuf};
 
 #[derive(Debug)]

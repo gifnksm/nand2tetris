@@ -7,7 +7,7 @@ use std::{
 };
 use thiserror::Error;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct WithLoc<T> {
     pub data: T,
     pub loc: Location,
@@ -49,6 +49,23 @@ impl<T, E> WithLoc<Result<T, E>> {
             }),
         }
     }
+
+    pub fn transpose_ok(self) -> Result<WithLoc<T>, E> {
+        let data = self.data?;
+        Ok(WithLoc {
+            data,
+            loc: self.loc,
+        })
+    }
+}
+
+impl<T> WithLoc<Option<T>> {
+    pub fn transpose(self) -> Option<WithLoc<T>> {
+        self.data.map(|data| WithLoc {
+            data,
+            loc: self.loc,
+        })
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -60,6 +77,15 @@ pub struct Location {
 impl fmt::Display for Location {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}:{}", self.line_num, self.column)
+    }
+}
+
+impl Location {
+    pub(crate) const fn builtin() -> Location {
+        Self {
+            line_num: 0,
+            column: 0,
+        }
     }
 }
 

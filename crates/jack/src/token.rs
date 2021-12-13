@@ -192,11 +192,15 @@ impl Symbol {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Display)]
+#[derive(Debug, Clone, PartialEq, Eq, Display, Hash)]
 #[display("{0}")]
 pub struct Ident(String);
 
 impl Ident {
+    pub(crate) fn new(ident: impl Into<String>) -> Self {
+        Ident(ident.into())
+    }
+
     pub fn as_str(&self) -> &str {
         &self.0
     }
