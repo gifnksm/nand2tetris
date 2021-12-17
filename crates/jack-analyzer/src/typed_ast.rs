@@ -8,7 +8,7 @@ use std::io;
 
 impl WriteXml for TypedClass {
     fn write_xml(&self, indent: usize, writer: &mut XmlWriter) -> io::Result<()> {
-        let TypedClass {
+        let Self {
             name,
             static_vars,
             fields,
@@ -37,10 +37,10 @@ impl WriteXml for Variable {
 impl WriteXml for VarSymbol {
     fn write_xml(&self, indent: usize, writer: &mut XmlWriter) -> io::Result<()> {
         match self {
-            VarSymbol::StaticVariable(v) => v.write_xml(indent, writer),
-            VarSymbol::Field(f) => f.write_xml(indent, writer),
-            VarSymbol::LocalVariable(v) => v.write_xml(indent, writer),
-            VarSymbol::Parameter(p) => p.write_xml(indent, writer),
+            Self::StaticVariable(v) => v.write_xml(indent, writer),
+            Self::Field(f) => f.write_xml(indent, writer),
+            Self::LocalVariable(v) => v.write_xml(indent, writer),
+            Self::Parameter(p) => p.write_xml(indent, writer),
         }
     }
 }

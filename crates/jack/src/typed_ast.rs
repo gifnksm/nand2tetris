@@ -1,3 +1,7 @@
+pub use self::control_flow_graph::*;
+
+mod control_flow_graph;
+
 use crate::{
     ast::{BinaryOp, ReturnType, SubroutineKind, Type, UnaryOp},
     symbol_table::VarSymbol,

@@ -5,15 +5,17 @@ use common::{
     iter::{IteratorExt, TryIterator},
 };
 use jack::{
-    ast::{Class, FromTokens, ResolveError},
+    ast::{Class, FromTokens},
     symbol_table::GlobalSymbolTable,
     token::Tokens,
+    typed_ast::ToControlFlowGraph,
 };
 use std::{env, path::PathBuf};
 use thiserror::Error;
 use token::TokenWriter;
 
 mod ast;
+mod control_flow_graph;
 mod token;
 mod typed_ast;
 mod xml;
@@ -37,7 +39,11 @@ pub enum Error {
     #[error("failed to persist output file: {}", _0.display())]
     PersistOutputFile(PathBuf, #[source] StdError),
     #[error("failed to resolve symbols in file: {}", _0.display())]
-    Resolve(PathBuf, #[source] ResolveError),
+    Resolve(PathBuf, #[source] StdError),
+    #[error("failed to convert to control flow graph file: {}", _0.display())]
+    ToCfg(PathBuf, #[source] StdError),
+    #[error("failed to optimize to control flow graph file: {}", _0.display())]
+    Optimize(PathBuf, #[source] StdError),
 }
 
 type StdError = Box<dyn std::error::Error + Send + Sync + 'static>;
@@ -89,9 +95,24 @@ fn main() -> Result<()> {
         let mut typed_ast_writer = XmlWriter::open(&typed_ast_output_path)?;
         let typed_ast = ast
             .resolve(&symbol_table)
-            .map_err(|e| Error::Resolve(input_path, e))?;
+            .map_err(|e| Error::Resolve(input_path.clone(), e.into()))?;
         typed_ast_writer.write(&typed_ast)?;
         xml_writers.push(typed_ast_writer);
+
+        let cfg_output_path = input_path.with_extension("cfg.xml");
+        let mut cfg_writer = XmlWriter::open(&cfg_output_path)?;
+        let mut cfg = typed_ast
+            .to_control_flow_graph()
+            .map_err(|e| Error::ToCfg(input_path.clone(), e.into()))?;
+        cfg_writer.write(&cfg)?;
+        xml_writers.push(cfg_writer);
+
+        let cfg_opt_output_path = input_path.with_extension("cfg-optimized.xml");
+        let mut cfg_opt_writer = XmlWriter::open(&cfg_opt_output_path)?;
+        cfg.optimize()
+            .map_err(|e| Error::Optimize(input_path, e.into()))?;
+        cfg_opt_writer.write(&cfg)?;
+        xml_writers.push(cfg_opt_writer);
     }
 
     for token_writer in token_writers {
