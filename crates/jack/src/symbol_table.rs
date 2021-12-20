@@ -1,3 +1,5 @@
+use vm::Segment;
+
 use crate::{
     ast::{ReturnType, SubroutineKind, Type},
     token::{Ident, WithLoc},
@@ -26,7 +28,6 @@ pub struct InternalClassSymbolTable<'a> {
     outer: &'a GlobalSymbolTable,
     class_name: WithLoc<Ident>,
     table: HashMap<Ident, Symbol>,
-    props: HashMap<Ident, Property>,
 }
 
 #[derive(Debug, Clone)]
@@ -102,6 +103,15 @@ impl VarSymbol {
             Self::Parameter(p) => &p.ty,
         }
     }
+
+    pub(crate) fn segment_slot(&self) -> (Segment, usize) {
+        match self {
+            Self::StaticVariable(v) => (Segment::Static, v.slot_index),
+            Self::Field(f) => (Segment::This, f.slot_index),
+            Self::LocalVariable(f) => (Segment::Local, f.slot_index),
+            Self::Parameter(f) => (Segment::Argument, f.slot_index),
+        }
+    }
 }
 
 impl SubroutineSymbol {
@@ -111,12 +121,6 @@ impl SubroutineSymbol {
             Self::ClassMethod(m) => &m.params,
         }
     }
-}
-
-#[derive(Debug, Clone)]
-pub(crate) enum Property {
-    Method(Method),
-    Field(Field),
 }
 
 #[derive(Debug, Clone)]
@@ -144,6 +148,7 @@ pub(crate) enum ClassMethodKind {
 pub struct StaticVariable {
     pub name: WithLoc<Ident>,
     pub ty: WithLoc<Type>,
+    pub slot_index: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -265,15 +270,6 @@ impl Symbol {
             Symbol::ClassMethod(m) => &m.name,
             Symbol::LocalVariable(v) => &v.name,
             Symbol::Parameter(p) => &p.name,
-        }
-    }
-}
-
-impl Property {
-    fn name(&self) -> &WithLoc<Ident> {
-        match self {
-            Property::Method(m) => &m.name,
-            Property::Field(f) => &f.name,
         }
     }
 }

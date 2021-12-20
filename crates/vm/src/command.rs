@@ -1,12 +1,13 @@
 pub use self::parser::*;
 use asm::hack::Imm;
-use std::{borrow::Borrow, fmt};
+use std::borrow::Borrow;
 
+mod display;
 mod parser;
 mod translator;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum Command {
+pub enum Command {
     Add,
     Sub,
     Neg,
@@ -36,7 +37,7 @@ impl Command {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Segment {
+pub enum Segment {
     Argument,
     Local,
     Static,
@@ -58,6 +59,19 @@ impl Segment {
             Self::Temp => 8,
         }
     }
+
+    fn as_str(&self) -> &'static str {
+        match self {
+            Self::Argument => "argument",
+            Self::Local => "local",
+            Self::Static => "static",
+            Self::Constant => "constant",
+            Self::This => "this",
+            Self::That => "that",
+            Self::Pointer => "pointer",
+            Self::Temp => "temp",
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -75,12 +89,6 @@ impl Borrow<str> for FuncName {
 impl From<Ident> for FuncName {
     fn from(s: Ident) -> Self {
         Self(s.0)
-    }
-}
-
-impl fmt::Display for FuncName {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        fmt::Display::fmt(&self.0, f)
     }
 }
 
@@ -120,12 +128,6 @@ impl Borrow<str> for Label {
 impl From<Ident> for Label {
     fn from(s: Ident) -> Self {
         Self(s.0)
-    }
-}
-
-impl fmt::Display for Label {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        fmt::Display::fmt(&self.0, f)
     }
 }
 

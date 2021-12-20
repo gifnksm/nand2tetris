@@ -20,31 +20,31 @@ impl WithLoc<CfgClass> {
         for sub in &mut self.data.subs {
             let mut blocks = mem::take(&mut sub.data.blocks);
             let mut block_count = usize::MAX;
-            while sub.data.blocks.len() < block_count {
+            let mut updated = false;
+            while sub.data.blocks.len() < block_count || updated {
+                updated = false;
                 block_count = sub.data.blocks.len();
-                replace_empty(&mut blocks);
-                concat_unique(&mut blocks);
+                updated |= replace_empty(&mut blocks);
+                updated |= concat_unique(&mut blocks);
                 blocks = remove_unreachable(sub.data.entry_id, blocks)?;
             }
             sub.data.blocks = blocks;
+            sub.data.update_bb_links();
         }
         Ok(())
     }
 }
 
-fn replace_empty(blocks: &mut [WithLoc<BasicBlock>]) {
+fn replace_empty(blocks: &mut [WithLoc<BasicBlock>]) -> bool {
+    let mut updated = false;
     let mut replace_block = HashMap::new();
 
     for block in &mut *blocks {
         match &block.data.exit {
-            Exit::Return(expr) => {
-                if block.data.stmts.is_empty() && expr.is_none() {
-                    replace_block.insert(block.data.id, Exit::Return(None));
-                }
-            }
+            Exit::Return(_) => {}
             Exit::Goto(dest) => {
                 if block.data.stmts.is_empty() {
-                    replace_block.insert(block.data.id, Exit::Goto(*dest));
+                    replace_block.insert(block.data.id, *dest);
                 }
             }
             Exit::If(_, _, _) => {}
@@ -53,15 +53,32 @@ fn replace_empty(blocks: &mut [WithLoc<BasicBlock>]) {
     }
 
     for block in &mut *blocks {
-        if let Exit::Goto(dest) = &block.data.exit {
-            if let Some(new_dest) = replace_block.get(dest) {
-                block.data.exit = new_dest.clone();
+        match &mut block.data.exit {
+            Exit::Return(_) => {}
+            Exit::Goto(dest) => {
+                if let Some(new_dest) = replace_block.get(dest) {
+                    *dest = *new_dest;
+                    updated = true;
+                }
             }
+            Exit::If(_cond, then_bb, else_bb) => {
+                if let Some(new_then_bb) = replace_block.get(then_bb) {
+                    *then_bb = *new_then_bb;
+                    updated = true;
+                }
+                if let Some(new_else_bb) = replace_block.get(else_bb) {
+                    *else_bb = *new_else_bb;
+                    updated = true;
+                }
+            }
+            Exit::Unreachable => {}
         }
     }
+    updated
 }
 
-fn concat_unique(blocks: &mut [WithLoc<BasicBlock>]) {
+fn concat_unique(blocks: &mut [WithLoc<BasicBlock>]) -> bool {
+    let mut updated = false;
     let mut entry_count = HashMap::new();
     let block_map = blocks
         .iter()
@@ -92,9 +109,11 @@ fn concat_unique(blocks: &mut [WithLoc<BasicBlock>]) {
                 let new_exit = mem::replace(&mut blocks[next_idx].data.exit, Exit::Unreachable);
                 blocks[i].data.stmts.extend(append_stmts);
                 blocks[i].data.exit = new_exit;
+                updated = true;
             }
         }
     }
+    updated
 }
 
 fn remove_unreachable(

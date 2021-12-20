@@ -29,6 +29,7 @@ impl WriteXml for CfgSubroutine {
             params,
             vars,
             entry_id,
+            block_index_map: _,
             blocks,
         } = self;
 
@@ -48,7 +49,12 @@ impl WriteXml for CfgSubroutine {
 
 impl WriteXml for BasicBlock {
     fn write_xml(&self, indent: usize, writer: &mut XmlWriter) -> io::Result<()> {
-        let Self { id, stmts, exit } = self;
+        let Self {
+            id,
+            src_ids: _,
+            stmts,
+            exit,
+        } = self;
         writer.write_multi(indent, "basicBlock", |indent, writer| {
             writer.write_single(indent, "id", &id.to_string())?;
             writer.write_list(indent, "statementList", stmts)?;

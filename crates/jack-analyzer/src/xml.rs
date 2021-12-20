@@ -54,7 +54,7 @@ impl XmlWriter {
     pub(crate) fn write(&mut self, class: &impl WriteXml) -> Result<(), Error> {
         class
             .write_xml(0, self)
-            .map_err(|e| Error::WriteAst(self.path.to_owned(), e.into()))?;
+            .map_err(|e| Error::WriteXml(self.path.to_owned(), e.into()))?;
         Ok(())
     }
 

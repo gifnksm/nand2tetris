@@ -47,10 +47,15 @@ impl WriteXml for VarSymbol {
 
 impl WriteXml for StaticVariable {
     fn write_xml(&self, indent: usize, writer: &mut XmlWriter) -> io::Result<()> {
-        let Self { name, ty } = self;
+        let Self {
+            name,
+            ty,
+            slot_index,
+        } = self;
         writer.write_multi(indent, "staticVariable", |indent, writer| {
             writer.write_single(indent, "name", name.data.as_str())?;
             writer.write_single(indent, "type", ty.data.as_str())?;
+            writer.write_single(indent, "slotIndex", &slot_index.to_string())?;
             Ok(())
         })
     }

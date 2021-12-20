@@ -18,7 +18,7 @@ impl TokenWriter {
 
         writer
             .write_open(0, "tokens")
-            .map_err(|e| Error::WriteToken(path.clone(), e.into()))?;
+            .map_err(|e| Error::WriteXml(path.clone(), e.into()))?;
 
         Ok(Self { path, writer })
     }
@@ -26,14 +26,14 @@ impl TokenWriter {
     pub(crate) fn write(&mut self, token: &Token) -> Result<(), Error> {
         token
             .write_xml(0, &mut self.writer)
-            .map_err(|e| Error::WriteToken(self.path.clone(), e.into()))?;
+            .map_err(|e| Error::WriteXml(self.path.clone(), e.into()))?;
         Ok(())
     }
 
     pub(crate) fn persist(mut self) -> Result<(), Error> {
         self.writer
             .write_close(0, "tokens")
-            .map_err(|e| Error::WriteToken(self.path.clone(), e.into()))?;
+            .map_err(|e| Error::WriteXml(self.path.clone(), e.into()))?;
         self.writer.persist()?;
         Ok(())
     }

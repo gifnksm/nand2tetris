@@ -156,6 +156,22 @@ impl FromStr for Ident {
     }
 }
 
+impl FromStr for FuncName {
+    type Err = ParseIdentError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(Ident::from_str(s)?.into())
+    }
+}
+
+impl FromStr for Label {
+    type Err = ParseIdentError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(Ident::from_str(s)?.into())
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;

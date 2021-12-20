@@ -3,9 +3,11 @@ use crate::{
     token::{Ident, WithLoc},
     typed_ast::{TypedDoStatement, TypedExpression, TypedLetStatement, Variable},
 };
-use std::fmt;
+use std::{collections::HashMap, fmt};
 
+mod codegen;
 mod optimizer;
+mod update;
 
 #[derive(Debug)]
 pub struct CfgClass {
@@ -23,24 +25,26 @@ pub struct CfgSubroutine {
     pub params: Vec<WithLoc<Variable>>,
     pub vars: Vec<WithLoc<Variable>>,
     pub entry_id: BbId,
+    pub block_index_map: HashMap<BbId, usize>,
     pub blocks: Vec<WithLoc<BasicBlock>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct BbId {
-    pub line_num: u32,
     pub label: &'static str,
+    pub index: u32,
 }
 
 impl fmt::Display for BbId {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}.{}", self.label, self.line_num)
+        write!(f, "{}{}", self.label, self.index)
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct BasicBlock {
     pub id: BbId,
+    pub src_ids: Vec<BbId>,
     pub stmts: Vec<CfgStatement>,
     pub exit: Exit,
 }

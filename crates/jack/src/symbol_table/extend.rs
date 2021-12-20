@@ -182,7 +182,6 @@ impl<'a> InternalClassSymbolTable<'a> {
             subs,
         } = class;
         let mut table = HashMap::<Ident, Symbol>::new();
-        let mut props = HashMap::<Ident, Property>::new();
 
         let mut static_vars = vec![];
         let mut fields = vec![];
@@ -197,6 +196,7 @@ impl<'a> InternalClassSymbolTable<'a> {
                         static_vars.push(StaticVariable {
                             name: name.clone(),
                             ty: ty.clone(),
+                            slot_index: static_vars.len(),
                         })
                     }
                 }
@@ -250,25 +250,6 @@ impl<'a> InternalClassSymbolTable<'a> {
             }
         }
 
-        let prop_syms = fields
-            .iter()
-            .cloned()
-            .map(Property::Field)
-            .chain(methods.iter().cloned().map(Property::Method));
-        for sym in prop_syms {
-            match props.entry(sym.name().data.clone()) {
-                Entry::Occupied(ent) => {
-                    return Err(SymbolTableExtendError::DuplicateProperty(
-                        sym.name().clone(),
-                        ent.get().name().loc,
-                    ))
-                }
-                Entry::Vacant(ent) => {
-                    ent.insert(sym);
-                }
-            }
-        }
-
         let tables_syms = static_vars
             .into_iter()
             .map(Symbol::StaticVariable)
@@ -293,7 +274,6 @@ impl<'a> InternalClassSymbolTable<'a> {
             class_name: class_name.clone(),
             outer,
             table,
-            props,
         })
     }
 }
@@ -311,6 +291,7 @@ impl<'a> SubroutineSymbolTable<'a> {
             body,
         } = sub;
         let SubroutineBody { vars, stmts: _ } = &body.data;
+        let is_method = matches!(kind.data, SubroutineKind::Method);
 
         let params = params
             .data
@@ -320,7 +301,11 @@ impl<'a> SubroutineSymbolTable<'a> {
             .map(|(slot_index, p)| Parameter {
                 name: p.data.name.clone(),
                 ty: p.data.ty.clone(),
-                slot_index,
+                slot_index: if is_method {
+                    slot_index + 1
+                } else {
+                    slot_index
+                },
             })
             .map(Symbol::Parameter);
         let vars = vars

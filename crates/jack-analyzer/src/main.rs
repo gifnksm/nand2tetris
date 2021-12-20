@@ -1,7 +1,7 @@
 use crate::xml::XmlWriter;
 use color_eyre::eyre::{ensure, Result};
 use common::{
-    fs::DirOrFileReader,
+    fs::{DirOrFileReader, FileWriter},
     iter::{IteratorExt, TryIterator},
 };
 use jack::{
@@ -10,7 +10,7 @@ use jack::{
     token::Tokens,
     typed_ast::ToControlFlowGraph,
 };
-use std::{env, path::PathBuf};
+use std::{env, io::prelude::*, path::PathBuf};
 use thiserror::Error;
 use token::TokenWriter;
 
@@ -32,10 +32,8 @@ pub enum Error {
     Parse(PathBuf, #[source] StdError),
     #[error("failed to register symbols from file: {}", _0.display())]
     ExtendSymbolTable(PathBuf, #[source] StdError),
-    #[error("failed to write token to file: {}", _0.display())]
-    WriteToken(PathBuf, #[source] StdError),
-    #[error("failed to write AST to file: {}", _0.display())]
-    WriteAst(PathBuf, #[source] StdError),
+    #[error("failed to write xml to file: {}", _0.display())]
+    WriteXml(PathBuf, #[source] StdError),
     #[error("failed to persist output file: {}", _0.display())]
     PersistOutputFile(PathBuf, #[source] StdError),
     #[error("failed to resolve symbols in file: {}", _0.display())]
@@ -44,6 +42,8 @@ pub enum Error {
     ToCfg(PathBuf, #[source] StdError),
     #[error("failed to optimize to control flow graph file: {}", _0.display())]
     Optimize(PathBuf, #[source] StdError),
+    #[error("failed to write VM command to file: {}", _0.display())]
+    WriteVmCommand(PathBuf, #[source] StdError),
 }
 
 type StdError = Box<dyn std::error::Error + Send + Sync + 'static>;
@@ -61,6 +61,7 @@ fn main() -> Result<()> {
     let mut asts = vec![];
     let mut token_writers = vec![];
     let mut xml_writers = vec![];
+    let mut file_writers = vec![];
 
     DirOrFileReader::open(&input_path, "jack")?.try_for_each(|reader| {
         let (input_path, reader) = reader
@@ -110,9 +111,18 @@ fn main() -> Result<()> {
         let cfg_opt_output_path = input_path.with_extension("cfg-optimized.xml");
         let mut cfg_opt_writer = XmlWriter::open(&cfg_opt_output_path)?;
         cfg.optimize()
-            .map_err(|e| Error::Optimize(input_path, e.into()))?;
+            .map_err(|e| Error::Optimize(input_path.clone(), e.into()))?;
         cfg_opt_writer.write(&cfg)?;
         xml_writers.push(cfg_opt_writer);
+
+        let vm_output_path = input_path.with_extension("vm");
+        let mut vm_writer = FileWriter::open(&vm_output_path)?;
+        let commands = cfg.to_vm();
+        for command in &commands {
+            writeln!(vm_writer.writer(), "{}", command)
+                .map_err(|e| Error::WriteVmCommand(input_path.clone(), e.into()))?;
+        }
+        file_writers.push(vm_writer);
     }
 
     for token_writer in token_writers {
@@ -120,6 +130,9 @@ fn main() -> Result<()> {
     }
     for xml_writer in xml_writers {
         xml_writer.persist()?;
+    }
+    for file_writer in file_writers {
+        file_writer.persist()?;
     }
 
     Ok(())

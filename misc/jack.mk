@@ -22,8 +22,11 @@ OS_VM=$(addprefix $(TARGET_DIR)/,$(notdir $(OS_JACK)))
 
 TARGET_DIR=$(GIT_CDUP)/target/nand2tetris/projects/$(GIT_PREFIX)
 TARGET_JACK=$(wildcard $(TARGET_DIR)/*.jack) $(addprefix $(TARGET_DIR)/,$(wildcard *.jack))
-TARGET_VM=$(patsubst %.jack,%.vm,$(TARGET_JACK)) $(OS_VM)
 TARGET_JACK_ANALYZED=$(TARGET_DIR)/.jack.analyzed
+TARGET_COMPILED_VM=$(patsubst %.jack,%.vm,$(TARGET_JACK))
+TARGET_REFERENCE_JACK=$(patsubst $(TARGET_DIR)/%.jack,$(TARGET_DIR)/JackCompiler/%.jack,$(TARGET_JACK))
+TARGET_REFERENCE_VM=$(patsubst %.jack,%.vm,$(TARGET_REFERENCE_JACK))
+TARGET_VM=$(TARGET_COMPILED_VM) $(OS_VM)
 TARGET_TOKEN_XML=$(patsubst %.jack,%.token.xml,$(TARGET_JACK))
 TARGET_AST_XML=$(patsubst %.jack,%.ast.xml,$(TARGET_JACK))
 TARGET_TYPED_AST_XML=$(patsubst %.jack,%.typed-ast.xml,$(TARGET_JACK))
@@ -37,7 +40,10 @@ TARGET=\
     $(TARGET_JACK_ANALYZED) \
     $(TARGET_TOKEN_XML) \
     $(TARGET_AST_XML) \
-    $(TARGET_TYPED_AST_XML)
+    $(TARGET_TYPED_AST_XML) \
+    $(TARGET_COMPILED_VM) \
+    $(TARGET_REFERENCE_JACK) \
+    $(TARGET_REFERENCE_VM)
 
 ifndef NOCOMPILE
 TARGET+=\
@@ -75,9 +81,12 @@ test-ast-%: $(TARGET_DIR)/%.xml $(TARGET_DIR)/%.ast.xml
 $(TARGET_DIR)/%.jack: %.jack | $(TARGET_DIR)/
 	cp $< $@
 
-$(TARGET_DIR)/%.vm: $(TARGET_DIR)/%.jack | $(TARGET_DIR)/
+$(TARGET_DIR)/JackCompiler/%.jack: $(TARGET_DIR)/%.jack | $(TARGET_DIR)/JackCompiler/
+	cp $< $@
+$(TARGET_DIR)/JackCompiler/%.vm: $(TARGET_DIR)/JackCompiler/%.jack
 	$(GIT_CDUP)/tools/JackCompiler $<
 
+$(TARGET_COMPILED_VM): $(TARGET_DIR)/.jack.analyzed
 $(TARGET_TOKEN_XML): $(TARGET_DIR)/.jack.analyzed
 $(TARGET_AST_XML): $(TARGET_DIR)/.jack.analyzed
 $(TARGET_TYPED_AST_XML): $(TARGET_DIR)/.jack.analyzed
@@ -115,4 +124,6 @@ $(JACK_ANALYZER):
 .PHONY: $(JACK_ANALYZER)
 
 $(TARGET_DIR)/:
+	mkdir -p $@
+$(TARGET_DIR)/JackCompiler/:
 	mkdir -p $@
