@@ -20,6 +20,8 @@ mod token;
 mod typed_ast;
 mod xml;
 
+type StdError = Box<dyn std::error::Error + Send + Sync + 'static>;
+
 #[derive(Debug, Error)]
 pub enum Error {
     #[error("failed to open input file: {}", _0.display())]
@@ -45,8 +47,6 @@ pub enum Error {
     #[error("failed to write VM command to file: {}", _0.display())]
     WriteVmCommand(PathBuf, #[source] StdError),
 }
-
-type StdError = Box<dyn std::error::Error + Send + Sync + 'static>;
 
 #[derive(Debug)]
 struct Params {

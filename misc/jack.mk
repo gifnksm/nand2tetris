@@ -16,17 +16,17 @@ GIT_CDUP=$(patsubst %/,%,$(shell git rev-parse --show-cdup))
 GIT_PREFIX=$(patsubst %/,%,$(shell git rev-parse --show-prefix))
 TSTIGNORE=$(wildcard .tstignore)
 
-OS_DIR=$(GIT_CDUP)/target/nand2tetris/tools/OS
-OS_JACK=$(wildcard $(OS_DIR)/*.vm)
-OS_VM=$(addprefix $(TARGET_DIR)/,$(notdir $(OS_JACK)))
+OS_DIR=$(GIT_CDUP)/JackOS
+OS_JACK=$(wildcard $(OS_DIR)/*.jack)
+TARGET_OS_JACK=$(patsubst $(OS_DIR)/%,$(TARGET_DIR)/%,$(OS_JACK))
 
 TARGET_DIR=$(GIT_CDUP)/target/nand2tetris/projects/$(GIT_PREFIX)
-TARGET_JACK=$(wildcard $(TARGET_DIR)/*.jack) $(addprefix $(TARGET_DIR)/,$(wildcard *.jack))
+TARGET_JACK=$(wildcard $(TARGET_DIR)/*.jack) $(addprefix $(TARGET_DIR)/,$(wildcard *.jack)) $(TARGET_OS_JACK)
 TARGET_JACK_ANALYZED=$(TARGET_DIR)/.jack.analyzed
 TARGET_COMPILED_VM=$(patsubst %.jack,%.vm,$(TARGET_JACK))
 TARGET_REFERENCE_JACK=$(patsubst $(TARGET_DIR)/%.jack,$(TARGET_DIR)/JackCompiler/%.jack,$(TARGET_JACK))
 TARGET_REFERENCE_VM=$(patsubst %.jack,%.vm,$(TARGET_REFERENCE_JACK))
-TARGET_VM=$(TARGET_COMPILED_VM) $(OS_VM)
+TARGET_VM=$(TARGET_COMPILED_VM)
 TARGET_TOKEN_XML=$(patsubst %.jack,%.token.xml,$(TARGET_JACK))
 TARGET_AST_XML=$(patsubst %.jack,%.ast.xml,$(TARGET_JACK))
 TARGET_TYPED_AST_XML=$(patsubst %.jack,%.typed-ast.xml,$(TARGET_JACK))
@@ -95,8 +95,8 @@ $(TARGET_DIR)/.jack.analyzed: $(TARGET_JACK) $(JACK_ANALYZER) | $(TARGET_DIR)/
 	$(JACK_ANALYZER) $(TARGET_DIR)
 	touch $@
 
-$(TARGET_DIR)/%.vm: $(OS_DIR)/%.vm | $(TARGET_DIR)/
-	ln -sf $(GIT_CDUP)/../tools/OS/$(notdir $<) $@
+$(TARGET_DIR)/%.jack: $(OS_DIR)/%.jack | $(TARGET_DIR)/
+	ln -sf $(GIT_CDUP)/../../../JackOS/$(notdir $<) $@
 
 $(TARGET_DIR)/$(DIRNAME).asm: $(TARGET_VM) $(VMTRANS)
 	$(VMTRANS) $(TARGET_DIR)

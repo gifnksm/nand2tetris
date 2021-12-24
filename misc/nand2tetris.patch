@@ -1,0 +1,36 @@
+diff --no-dereference -ur nand2tetris.original/projects/12/ArrayTest/ArrayTest.tst nand2tetris/projects/12/ArrayTest/ArrayTest.tst
+--- nand2tetris.original/projects/12/ArrayTest/ArrayTest.tst	2016-08-24 12:18:10.000000000 +0900
++++ nand2tetris/projects/12/ArrayTest/ArrayTest.tst	2021-12-21 20:29:51.083673083 +0900
+@@ -8,7 +8,7 @@
+ compare-to ArrayTest.cmp,
+ output-list RAM[8000]%D2.6.1 RAM[8001]%D2.6.1 RAM[8002]%D2.6.1 RAM[8003]%D2.6.1;
+ 
+-repeat 1000000 {
++repeat 2000000 {
+   vmstep;
+ }
+ 
+diff --no-dereference -ur nand2tetris.original/projects/12/MathTest/MathTest.tst nand2tetris/projects/12/MathTest/MathTest.tst
+--- nand2tetris.original/projects/12/MathTest/MathTest.tst	2016-08-24 12:18:58.000000000 +0900
++++ nand2tetris/projects/12/MathTest/MathTest.tst	2021-12-21 20:30:23.293673543 +0900
+@@ -8,7 +8,7 @@
+ compare-to MathTest.cmp,
+ output-list RAM[8000]%D2.6.1 RAM[8001]%D2.6.1 RAM[8002]%D2.6.1 RAM[8003]%D2.6.1 RAM[8004]%D2.6.1 RAM[8005]%D2.6.1 RAM[8006]%D2.6.1 RAM[8007]%D2.6.1 RAM[8008]%D2.6.1 RAM[8009]%D2.6.1 RAM[8010]%D2.6.1 RAM[8011]%D2.6.1 RAM[8012]%D2.6.1 RAM[8013]%D2.6.1;
+ 
+-repeat 1000000 {
++repeat 2000000 {
+   vmstep;
+ }
+ 
+diff --no-dereference -ur nand2tetris.original/projects/12/MemoryTest/MemoryTest.tst nand2tetris/projects/12/MemoryTest/MemoryTest.tst
+--- nand2tetris.original/projects/12/MemoryTest/MemoryTest.tst	2016-08-24 12:19:18.000000000 +0900
++++ nand2tetris/projects/12/MemoryTest/MemoryTest.tst	2021-12-21 20:30:52.973673968 +0900
+@@ -8,7 +8,7 @@
+ compare-to MemoryTest.cmp,
+ output-list RAM[8000]%D2.6.1 RAM[8001]%D2.6.1 RAM[8002]%D2.6.1 RAM[8003]%D2.6.1 RAM[8004]%D2.6.1 RAM[8005]%D2.6.1;
+ 
+-repeat 1000000 {
++repeat 2000000 {
+   vmstep;
+ }
+ 

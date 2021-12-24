@@ -1,0 +1,200 @@
+/**
+ * A library of functions for displaying graphics on the screen.
+ * The Hack physical screen consists of 256 rows (indexed 0..255, top to bottom)
+ * of 512 pixels each (indexed 0..511, left to right). The top left pixel on
+ * the screen is indexed (0,0).
+ */
+class Screen {
+    static Array screen;
+    static int screenWidth, screenHeight;
+    static int maxX, maxY;
+    static boolean color;
+
+    static Array twoToThe;
+
+    /** Initializes the Screen. */
+    function void init() {
+        var int i, b;
+
+        let screen = 16384;
+        let screenWidth = 512;
+        let screenHeight = 256;
+        let maxX = screenWidth - 1;
+        let maxY = screenHeight - 1;
+        let color = true;
+
+        let twoToThe = Array.new(16);
+        let b = 1;
+        while (i < 16) {
+            let twoToThe[i] = b;
+            let b = b + b;
+            let i = i + 1;
+        }
+
+        return;
+    }
+
+    /** Erases the entire screen. */
+    function void clearScreen() {
+        return;
+    }
+
+    /** Sets the current color, to be used for all subsequent drawXXX commands.
+     *  Black is represented by true, white by false. */
+    function void setColor(boolean b) {
+        let color = b;
+        return;
+    }
+
+    /** Draws the (x,y) pixel, using the current color. */
+    function void drawPixel(int x, int y) {
+        if (~Screen._inScreen(x, y)) {
+            do Sys.error(7);
+        }
+        do Screen._drawPixel(x, y);
+        return;
+    }
+
+    function void _drawPixel(int x, int y) {
+        var int xChunk, bit, index;
+
+        let xChunk = x / 16;
+        let bit = twoToThe[x & 15];
+        let index = y * 32 + xChunk;
+        if (color) {
+            let screen[index] = screen[index] | bit;
+        } else {
+            let screen[index] = screen[index] & ~bit;
+        }
+        return;
+    }
+
+    /** Draws a line from pixel (x1,y1) to pixel (x2,y2), using the current color. */
+    function void drawLine(int x1, int y1, int x2, int y2) {
+        if (~Screen._inScreen(x1, y1) | ~Screen._inScreen(x2, y2)) {
+            do Sys.error(8);
+        }
+        do Screen._drawLine(x1, y1, x2, y2);
+        return;
+    }
+
+    function void _drawLine(int x1, int y1, int x2, int y2) {
+        var int tmp;
+        if (x1 > x2) {
+            let tmp = x1;
+            let x1 = x2;
+            let x2 = tmp;
+            let tmp = y1;
+            let y1 = y2;
+            let y2 = tmp;
+        }
+
+        if (y1 = y2) {
+            do Screen._drawHorizontalLine(x1, x2, y1);
+            return;
+        }
+
+        if (x1 = x2) {
+            if (y1 > y2) {
+                let tmp = y1;
+                let y1 = y2;
+                let y2 = tmp;
+            }
+            do Screen._drawVerticalLine(x1, y1, y2);
+            return;
+        }
+
+        if (y1 > y2) {
+            do Screen._drawRightUpLine(x1, y1, x2, y2);
+            return;
+        }
+        do Screen._drawRightDownLine(x1, y1, x2, y2);
+        return;
+    }
+
+    function void _drawHorizontalLine(int x1, int x2, int y) {
+        while (x1 < x2) {
+            do Screen._drawPixel(x1, y);
+            let x1 = x1 + 1;
+        }
+        do Screen._drawPixel(x1, y);
+        return;
+    }
+
+    function void _drawVerticalLine(int x, int y1, int y2) {
+        while (y1 < y2) {
+            do Screen._drawPixel(x, y1);
+            let y1 = y1 + 1;
+        }
+        do Screen._drawPixel(x, y1);
+        return;
+    }
+
+    function void _drawRightUpLine(int x1, int y1, int x2, int y2) {
+        var int dx, dy, v;
+        let dx = x2 - x1; // > 0
+        let dy = y1 - y2; // > 0
+        // v: ady - bdx
+        while (~(x1 > x2) & ~(y1 < y2)) {
+            do Screen._drawPixel(x1, y1);
+            if (v < 0) {
+                let x1 = x1 + 1;
+                let v = v + dy;
+            } else {
+                let y1 = y1 - 1;
+                let v = v - dx;
+            }
+        }
+        return;
+    }
+
+    function void _drawRightDownLine(int x1, int y1, int x2, int y2) {
+        var int dx, dy, v;
+        let dx = x2 - x1; // > 0
+        let dy = y2 - y1; // > 0
+        // v: ady - bdx
+        while (~(x1 > x2) & ~(y1 > y2)) {
+            do Screen._drawPixel(x1, y1);
+            if (v < 0) {
+                let x1 = x1 + 1;
+                let v = v + dy;
+            } else {
+                let y1 = y1 + 1;
+                let v = v - dx;
+            }
+        }
+        return;
+    }
+
+    /** Draws a filled rectangle whose top left corner is (x1, y1)
+     * and bottom right corner is (x2,y2), using the current color. */
+    function void drawRectangle(int x1, int y1, int x2, int y2) {
+        var int tmp;
+        if (~Screen._inScreen(x1, y1) | ~Screen._inScreen(x2, y2) | (x1 > x2) | (y1 > y2)) {
+            do Sys.error(9);
+        }
+        while (y1 < y2) {
+            do Screen._drawHorizontalLine(x1, x2, y1);
+            let y1 = y1 + 1;
+        }
+        do Screen._drawHorizontalLine(x1, x2, y1);
+        return;
+    }
+
+    /** Draws a filled circle of radius r<=181 around (x,y), using the current color. */
+    function void drawCircle(int x, int y, int r) {
+        var int dy, dyEnd, dx;
+        let dy = -r;
+        let dyEnd = r + 1;
+        while (dy < dyEnd) {
+            let dx = Math.sqrt((r * r) - (dy * dy));
+            do Screen._drawHorizontalLine(x - dx, x + dx,    y + dy);
+            let dy = dy + 1;
+        }
+        return;
+    }
+
+    function boolean _inScreen(int x, int y) {
+        return ~((x < 0) | (x > maxX) | (y < 0) | (y > maxY));
+    }
+}

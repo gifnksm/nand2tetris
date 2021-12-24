@@ -1,0 +1,154 @@
+/**
+ * A library of commonly used mathematical functions.
+ * Note: Jack compilers implement multiplication and division using OS method calls.
+ */
+class Math {
+
+    static Array twoToThe;
+
+    /** Initializes the library. */
+    function void init() {
+        var int i, b;
+        let twoToThe = Array.new(16);
+        let b = 1;
+        while (i < 16) {
+            let twoToThe[i] = b;
+            let b = b + b;
+            let i = i + 1;
+        }
+        return;
+    }
+
+    /** Returns the absolute value of x. */
+    function int abs(int x) {
+        if (x < 0) {
+            return -x;
+        }
+        return x;
+    }
+
+    /** Returns the product of x and y.
+     *  When a Jack compiler detects the multiplication operator '*' in the
+     *  program's code, it handles it by invoking this method. In other words,
+     *  the Jack expressions x*y and multiply(x,y) return the same value.
+     */
+    function int multiply(int x, int y) {
+        var int sum, shiftedX, j;
+        let shiftedX = x;
+        while (j < 16) {
+            if (Math._bit(y, j) = 1) {
+                let sum = sum + shiftedX;
+            }
+            let shiftedX = shiftedX + shiftedX;
+            let j = j + 1;
+        }
+        return sum;
+    }
+
+    /** Returns the integer part of x/y.
+     *  When a Jack compiler detects the multiplication operator '/' in the
+     *  program's code, it handles it by invoking this method. In other words,
+     *  the Jack expressions x/y and divide(x,y) return the same value.
+     */
+    function int divide(int x, int y) {
+        var int sign, q;
+        let sign = 1;
+        if (x < 0) {
+            let x = -x;
+            let sign = -sign;
+        }
+        if (y < 0) {
+            let y = -y;
+            let sign = -sign;
+        }
+        if (y = 0) {
+            do Sys.error(3);
+        }
+        let q = Math._dividePositive(x, y, false);
+        if (sign < 0) {
+            return -q;
+        }
+        return q;
+    }
+
+    /** Returns the integer modulo of x and y. */
+    function int modulo(int x, int y) {
+        var int sign, r;
+        let sign = 1;
+        if (x < 0) {
+            let x = -x;
+            let sign = -sign;
+        }
+        if (y < 0) {
+            let y = -y;
+        }
+        if (y = 0) {
+            do Sys.error(3);
+        }
+        let r = Math._dividePositive(x, y, true);
+        if (sign < 0) {
+            return -r;
+        }
+        return r;
+    }
+
+    function int _dividePositive(int x, int y, boolean isModulo) {
+        var int q, r, j;
+        let j = 16;
+        while (j > 0) {
+            let j = j - 1;
+            let r = r + r + Math._bit(x, j);
+            if (~(r < y)) {
+                let r = r - y;
+                let q = q + twoToThe[j];
+            }
+        }
+        if (isModulo) {
+            return r;
+        }
+        return q;
+    }
+
+
+    /** Returns the integer part of the square root of x. */
+    function int sqrt(int x) {
+        var int j, y, b;
+        if (x < 0) {
+            do Sys.error(4);
+        }
+
+        let j = 8;
+        while (j > 0) {
+            let j = j - 1;
+            let b = y + twoToThe[j];
+            if (((b * b) > 0) & ~((b * b) > x)) {
+                let y = b;
+            }
+        }
+        return y;
+    }
+
+    /** Returns the greater number. */
+    function int max(int a, int b) {
+        if (a > b) {
+            return a;
+        }
+        return b;
+    }
+
+    /** Returns the smaller number. */
+    function int min(int a, int b) {
+        if (a < b) {
+            return a;
+        }
+        return b;
+    }
+
+    /** Returns jth bit of i */
+    function int _bit(int i, int j) {
+        if ((twoToThe[j] & i) = 0) {
+            return 0;
+        }
+        return 1;
+    }
+}
